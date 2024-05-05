@@ -10,6 +10,7 @@ import 'package:pfa_app/color_themes.dart';
 import '../components.dart';
 
 import '../components.dart';
+import '../models/target_model.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -24,20 +25,23 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   int _selectedLoanType = 0;
   String dropdownvalue = 'Cash';
+  String purposedropdownvalue = 'Target';
+
+  bool isInsightOpen = true;
+  bool addTransaction = false
+  ;
   // List of items in our dropdown menu
   var items = [
     'Cash',
     'Mobile Transaction',
     'Bank Transaction',
-
+  ];
+  var purposeItems =[
+    "Target", "Saving", "Bill","Loan"
   ];
 
   List<String> tabsLength = ["All", "Income", "Expense"];
-  List myTargets = [
-    "Laptop",
-    "Car",
-    "House",
-  ];
+
 
   void changeTabs(int index) {
     setState(() {
@@ -60,10 +64,17 @@ class _HomePageState extends State<HomePage> {
               "Add new Loan",
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600),
             ),
-            actions: [IconButton(onPressed: () {}, icon: Icon(Icons.cancel))],
+            actions: [
+              IconButton(
+                onPressed: () {},
+                icon: Icon(Icons.cancel),
+              ),
+            ],
             content: Column(
               mainAxisSize: MainAxisSize.min,
-              children: [Text("hello")],
+              children: [
+                Text("hello"),
+              ],
             ),
           );
         });
@@ -100,6 +111,43 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
+  void closeInsightBox(){
+    setState(() {
+      isInsightOpen = !isInsightOpen;
+    });
+  }
+  void toggleTransactionCard(){
+    setState(() {
+      addTransaction = !addTransaction;
+    });
+    print(addTransaction);
+  }
+  showMoreTargetDetails(){
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Target Details'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text("Target A info")
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -113,6 +161,58 @@ class _HomePageState extends State<HomePage> {
           children: [
             ListView(
               children: [
+                (isInsightOpen)?Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8.0, vertical: 5),
+                  child: Container(
+                    width: double.infinity,
+                    height: 150,
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    decoration: BoxDecoration(
+                      color: color.primaryColor,
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(10),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 5.0),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.all(Radius.circular(15.0),),
+                                color: Colors.white,
+                              ),
+                              child: Center(child: Text("Insights",style: TextStyle(color: Colors.black,fontSize: 10,fontWeight: FontWeight.w600),),),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                closeInsightBox();
+                              },
+                              icon: Icon(
+                                Icons.cancel,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6.0),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(width: 1,color: Colors.white),
+                                borderRadius: BorderRadius.all(Radius.circular(10))
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ):Container(),
                 SizedBox(
                   height: 15,
                 ),
@@ -130,43 +230,14 @@ class _HomePageState extends State<HomePage> {
                               style: TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.w600),
                             ),
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => AddNewTargetPage(),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 13, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: color.primaryColor,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(8),
-                                  ),
+                            CustomeIconButton(title: "Add Target", ontap: (){
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => TargetsPage(),
                                 ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Icon(
-                                      Icons.add,
-                                      color: Colors.white,
-                                    ),
-                                    Text(
-                                      "Add target",
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600),
-                                    )
-                                  ],
-                                ),
-                              ),
-                            )
+                              );
+                            }, icon: Icons.add)
                           ],
                         ),
                         SizedBox(height: 10),
@@ -175,7 +246,16 @@ class _HomePageState extends State<HomePage> {
                             itemCount: myTargets.length,
                             scrollDirection: Axis.horizontal,
                             itemBuilder: (contaxt, index) {
-                              return TargetCard();
+                              double percentage =(myTargets[index].currentAmount/myTargets[index].targetAmount);
+                              DateTime currentTimestamp = DateTime.now(); // Example timestamp 1
+                              DateTime targetTime =myTargets[index].targetDuration ; // Example timestamp 2
+
+                              // Calculate the difference in days
+                              int targetRemainingDays = targetTime.difference(currentTimestamp).inDays;
+
+                              return TargetCard(targetName: myTargets[index].targetName, targetAmount: myTargets[index].targetAmount, percent: percentage,timeRemained: targetRemainingDays.toString(),ontap: (){
+                                showMoreTargetDetails();
+                              },);
                             },
                           ),
                         ),
@@ -190,7 +270,7 @@ class _HomePageState extends State<HomePage> {
                   padding: const EdgeInsets.all(10.0),
                   child: Container(
                     width: double.infinity,
-                    height: 180,
+                    height: 230,
                     padding: EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -250,7 +330,25 @@ class _HomePageState extends State<HomePage> {
                               ],
                             ),
                           ),
-                        )
+                        ),
+                        Container(
+                          width: double.infinity,
+                          height: 40.0,
+                          margin: EdgeInsets.symmetric(vertical: 5.0),
+                          decoration: BoxDecoration(
+                            border:
+                                Border.all(width: 2, color: color.primaryColor),
+                            borderRadius: BorderRadius.all(
+                              Radius.circular(8),
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              "Add saving",
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -262,14 +360,29 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       children: [
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               "My Loans",
                               style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w500),
+                                  fontSize: 16, fontWeight: FontWeight.w600),
                             ),
+                            Row(
+                              children: [
+                                Text("View all"),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5.0),
+                                  child: Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 15,
+                                  ),
+                                ),
+                              ],
+                            )
                           ],
                         ),
+                        Divider(),
                         Container(
                           width: double.infinity,
                           // height: 40,
@@ -318,7 +431,7 @@ class _HomePageState extends State<HomePage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => AddLoanPage(),
+                                      builder: (context) => LoansPage(),
                                     ),
                                   );
                                 },
@@ -329,7 +442,8 @@ class _HomePageState extends State<HomePage> {
                                   // height: 40,
                                   decoration: BoxDecoration(
                                     color: Colors.black12,
-                                    border: Border.all(width: 1, color: Colors.black38),
+                                    border: Border.all(
+                                        width: 1, color: Colors.black26),
                                     borderRadius: BorderRadius.all(
                                       Radius.circular(5),
                                     ),
@@ -379,13 +493,21 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
-            DraggableScrollableSheet(
+            Positioned(
+              bottom: 80,
+                right: 10,
+                child: FloatingActionButton(
+                  onPressed: (){
+                  toggleTransactionCard();
+                }, child: Icon((addTransaction)?Icons.close:Icons.add),)),
+
+            (addTransaction==true)? DraggableScrollableSheet(
               initialChildSize:
-                  0.1, // Initial size of the sheet (30% of the screen)
+                  0.7, // Initial size of the sheet (30% of the screen)
               minChildSize:
                   0.1, // Minimum size of the sheet (10% of the screen)
               maxChildSize:
-                  0.7, // Maximum size of the sheet (80% of the screen)
+                  0.8, // Maximum size of the sheet (80% of the screen)
               builder:
                   (BuildContext context, ScrollController scrollController) {
                 return Container(
@@ -396,77 +518,165 @@ class _HomePageState extends State<HomePage> {
                       top: Radius.circular(15),
                     ),
                   ),
-                  child: SingleChildScrollView(
+                  child: ListView(
                     controller: scrollController,
-                    child: Column(
-                      children: [
-                        Align(
-                          child: Container(
-                            width: 100,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: Colors.black12,
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(10),
-                              ),
+                    children: [
+                      Align(
+                        child: Container(
+                          width: 100,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: Colors.black12,
+                            borderRadius: BorderRadius.all(
+                              Radius.circular(10),
                             ),
                           ),
                         ),
-                        SizedBox(
-                          height: 10,
-                        ),
-                        Column(
-                          children: [
-                            Container(
-                              width: double.infinity,
-                              height: 50,
-                              // color: Colors.red,
-                              child: TabBar(
-                                padding: EdgeInsets.all(0),
-                                labelColor: Colors.black,
-                                indicatorColor: Colors.black,
-                                labelPadding: EdgeInsets.all(0),
-                                unselectedLabelStyle: TextStyle(
-                                  fontSize: 14,
-                                  // fontWeight: FontWeight.w400,
-                                  color: Colors.black54,
-                                ),
-                                labelStyle: TextStyle(
-                                    fontSize: 14, fontWeight: FontWeight.w700),
-                                tabs: [
-                                  Tab(
-                                    text: "New Transaction",
-                                  ),
-                                  Tab(text: "History"),
-                                ],
+                      ),
+                      SizedBox(
+                        height: 10,
+                      ),
+                      Column(
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            height: 50,
+                            // color: Colors.red,
+                            child: TabBar(
+                              padding: EdgeInsets.all(0),
+                              labelColor: Colors.black,
+                              indicatorColor: Colors.black,
+                              labelPadding: EdgeInsets.all(0),
+                              unselectedLabelStyle: TextStyle(
+                                fontSize: 14,
+                                // fontWeight: FontWeight.w400,
+                                color: Colors.black54,
                               ),
+                              labelStyle: TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w700),
+                              tabs: [
+                                Tab(
+                                  text: "New Transaction",
+                                ),
+                                Tab(text: "History"),
+                              ],
                             ),
-                            Container(
-                              width: double.infinity,
-                              height: MediaQuery.of(context).size.height / 2.2,
-                              // color: Colors.red,
-                              child: TabBarView(
-                                children: [
-                                  Container(
-                                    child: Column(children: [
-                                      InputBox(title: "Amount",),
+                          ),
+                          Container(
+                            width: double.infinity,
+                            height: MediaQuery.of(context).size.height / 2.2,
+                            // color: Colors.red,
+                            child: TabBarView(
+                              children: [
+                                Container(
+                                  child: Column(
+                                    children: [
                                       Container(
                                         width: double.infinity,
-                                        height: 55,
-                                        padding: EdgeInsets.symmetric(horizontal: 10,vertical: 7),
-                                        margin: EdgeInsets.symmetric(vertical: 8),
+                                        height: 50,
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 7),
+                                        margin:
+                                        EdgeInsets.symmetric(vertical: 5),
                                         decoration: BoxDecoration(
-                                          border: Border.all(width: 1, color: Colors.black26),
-                                          borderRadius: BorderRadius.all(Radius.circular(10),),
+                                          border: Border.all(
+                                              width: 1,
+                                              color: Colors.black26),
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(10),
+                                          ),
                                         ),
                                         child: DropdownButton(
+                                          isExpanded: true,
+                                          elevation: 0,
+                                          // Initial Value
+                                          value: purposedropdownvalue,
+                                          // Down Arrow Icon
+                                          icon: const Icon(
+                                              Icons.keyboard_arrow_down),
 
+                                          // Array list of items
+                                          items: purposeItems.map((String items) {
+                                            return DropdownMenuItem(
+                                              value: items,
+                                              child: Text(items),
+                                            );
+                                          }).toList(),
+                                          // After selecting the desired option,it will
+                                          // change button value to selected value
+                                          onChanged: (String? newValue) {
+                                            setState(() {
+                                              purposedropdownvalue = newValue!;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      Container(
+                                        width: double.infinity,
+                                        height: 50,
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 7),
+                                        margin:
+                                        EdgeInsets.symmetric(vertical: 5),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                              width: 1,
+                                              color: Colors.black26),
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(10),
+                                          ),
+                                        ),
+                                        child: DropdownButton(
+                                          isExpanded: true,
+                                          elevation: 0,
+                                          // Initial Value
+                                          value: purposedropdownvalue,
+                                          // Down Arrow Icon
+                                          icon: const Icon(
+                                              Icons.keyboard_arrow_down),
+
+                                          // Array list of items
+                                          items: purposeItems.map((String items) {
+                                            return DropdownMenuItem(
+                                              value: items,
+                                              child: Text(items),
+                                            );
+                                          }).toList(),
+                                          // After selecting the desired option,it will
+                                          // change button value to selected value
+                                          onChanged: (String? newValue) {
+                                            setState(() {
+                                              purposedropdownvalue = newValue!;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      InputBox(
+                                        title: "Amount",
+                                      ),
+                                      Container(
+                                        width: double.infinity,
+                                        height: 50,
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 7),
+                                        margin:
+                                        EdgeInsets.symmetric(vertical: 5),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                              width: 1,
+                                              color: Colors.black26),
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(10),
+                                          ),
+                                        ),
+                                        child: DropdownButton(
                                           isExpanded: true,
                                           elevation: 0,
                                           // Initial Value
                                           value: dropdownvalue,
                                           // Down Arrow Icon
-                                          icon: const Icon(Icons.keyboard_arrow_down),
+                                          icon: const Icon(
+                                              Icons.keyboard_arrow_down),
 
                                           // Array list of items
                                           items: items.map((String items) {
@@ -484,104 +694,115 @@ class _HomePageState extends State<HomePage> {
                                           },
                                         ),
                                       ),
-                                      InputBox(title: "Description",),
+
+                                      InputBox(
+                                        title: "Description",
+                                      ),
+                                      SizedBox(height: 12,),
                                       MaterialButton(
                                         minWidth: double.infinity,
                                         height: 50,
                                         color: color.buttonColor,
-                                        onPressed: (){}, child: Text("Add Transaction",style: TextStyle(color: Colors.white,fontWeight: FontWeight.w600),),)
-                                    ],),
+                                        onPressed: () {},
+                                        child: Text(
+                                          "Add Transaction",
+                                          style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600),
+                                        ),
+                                      )
+                                    ],
                                   ),
-                                  Container(
-                                    child: Column(
-                                      children: [
-                                        SizedBox(
-                                          height: 10,
-                                        ),
-                                        Container(
-                                          width: double.infinity,
-                                          height: 60,
-                                          padding: EdgeInsets.symmetric(
-                                              vertical: 3.0),
+                                ),
+                                Container(
+                                  child: Column(
+                                    children: [
+                                      SizedBox(
+                                        height: 10,
+                                      ),
+                                      Container(
+                                        width: double.infinity,
+                                        height: 60,
+                                        padding: EdgeInsets.symmetric(
+                                            vertical: 3.0),
 // color: Colors.black12,
-                                          child: ListView.builder(
-                                            itemCount: tabsLength.length,
-                                            scrollDirection: Axis.horizontal,
-                                            itemBuilder: (context, index) {
-                                              return Tabs(
-                                                title: tabsLength[index],
-                                                index: index,
-                                                selectedIndex: _selectedIndex,
-                                                isPressed: () {
-                                                  changeTabs(index);
+                                        child: ListView.builder(
+                                          itemCount: tabsLength.length,
+                                          scrollDirection: Axis.horizontal,
+                                          itemBuilder: (context, index) {
+                                            return Tabs(
+                                              title: tabsLength[index],
+                                              index: index,
+                                              selectedIndex: _selectedIndex,
+                                              isPressed: () {
+                                                changeTabs(index);
 // print(index);
-                                                  _pageController.animateToPage(
-                                                      index,
-                                                      duration: const Duration(
-                                                          milliseconds: 500),
-                                                      curve: Curves.ease);
-                                                },
-                                              );
-                                            },
-                                          ),
+                                                _pageController.animateToPage(
+                                                    index,
+                                                    duration: const Duration(
+                                                        milliseconds: 500),
+                                                    curve: Curves.ease);
+                                              },
+                                            );
+                                          },
                                         ),
-                                        Expanded(
-                                          child: PageView(
-                                            controller: _pageController,
-                                            onPageChanged: (int page) {
-                                              setState(() {
-                                                _selectedIndex = page;
-                                                print(_selectedIndex);
-                                              });
-                                            },
-                                            children: <Widget>[
-                                              CustomPage(
-                                                content: Container(
-                                                  width: double.infinity,
-                                                  height: 240,
+                                      ),
+                                      Expanded(
+                                        child: PageView(
+                                          controller: _pageController,
+                                          onPageChanged: (int page) {
+                                            setState(() {
+                                              _selectedIndex = page;
+                                              print(_selectedIndex);
+                                            });
+                                          },
+                                          children: <Widget>[
+                                            CustomPage(
+                                              content: Container(
+                                                width: double.infinity,
+                                                height: 240,
 // color: Colors.red,
-                                                  child: ListView(
-                                                    children: [
-                                                      HistoryCard(
-                                                        isPressed: () {
+                                                child: ListView(
+                                                  children: [
+                                                    HistoryCard(
+                                                      isPressed: () {
 // Navigator.push(context, MaterialPageRoute(builder: (context)=>DetailsPage(id:1)));
-                                                        },
-                                                      ),
-                                                      HistoryCard(
-                                                        isPressed: () {
+                                                      },
+                                                    ),
+                                                    HistoryCard(
+                                                      isPressed: () {
 // Navigator.push(context, MaterialPageRoute(builder: (context)=>DetailsPage(id:2)));
-                                                        },
-                                                      ),
-                                                    ],
-                                                  ),
+                                                      },
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                              CustomPage(
-                                                content: Text('Page 2 Content'),
-                                              ),
-                                              CustomPage(
-                                                content: Text('Page 2 Content'),
-                                              ),
-                                              CustomPage(
-                                                content: Text('Page 2 Content'),
-                                              ),
-                                            ],
-                                          ),
+                                            ),
+                                            CustomPage(
+                                              content: Text('Page 2 Content'),
+                                            ),
+                                            CustomPage(
+                                              content: Text('Page 2 Content'),
+                                            ),
+                                            CustomPage(
+                                              content: Text('Page 2 Content'),
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                  )
-                                ],
-                              ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              ],
                             ),
-                          ],
-                        )
-                      ],
-                    ),
+                          ),
+                        ],
+                      )
+                    ],
                   ),
                 );
               },
-            )
+            ): Container(),
           ],
         ),
       ),
@@ -637,7 +858,6 @@ class LoanCard extends StatelessWidget {
                   ),
                 ],
               ),
-
               Row(
                 children: [
                   Text(
@@ -687,7 +907,7 @@ class LoanCard extends StatelessWidget {
                     height: 35,
                     margin: EdgeInsets.symmetric(horizontal: 5),
                     decoration: BoxDecoration(
-                      color: Colors.deepOrangeAccent,
+                      color: Colors.orange,
                       borderRadius: BorderRadius.all(
                         Radius.circular(5),
                       ),
@@ -804,54 +1024,76 @@ class SavingCard extends StatelessWidget {
 }
 
 class TargetCard extends StatelessWidget {
+  final String targetName;
+  final double targetAmount;
+  final double percent;
+  final String timeRemained;
+  final Function() ontap;
   const TargetCard({
     super.key,
+    required this.targetName,
+    required this.targetAmount,
+    required this.percent,
+    required this.timeRemained,
+    required this.ontap,
   });
+
+
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 180,
-      height: 180.0,
-      margin: EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        // color: Colors.yellow[50],
-        borderRadius: BorderRadius.all(
-          Radius.circular(12),
-        ),
-        border: Border.all(width: 2, color: Colors.green),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 180,
-            height: 35,
-            child: new LinearPercentIndicator(
-              width: 100.0,
-              lineHeight: 8.0,
-              percent: 0.5,
-              progressColor: Colors.orange,
-            ),
+    return GestureDetector(
+      onTap: ontap,
+      child: Container(
+        width: 180,
+        height: 180.0,
+        margin: EdgeInsets.all(8),
+        padding: EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          // color: Colors.yellow[50],
+          borderRadius: BorderRadius.all(
+            Radius.circular(12),
           ),
-          Expanded(
-            child: Container(
-              // color: Colors.blue,
-              child: Column(
-                children: [
-                  Center(
-                    child: Text("Buying new laptop"),
+          border: Border.all(width: 2, color: Colors.green),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  // width: 40,
+                  height: 35,
+                  child: new LinearPercentIndicator(
+                    width: 100.0,
+                    lineHeight: 8.0,
+                    percent: percent,
+                    progressColor: Colors.orange,
                   ),
-                  Center(
-                    child: Text(
-                      "800K",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                Text("${timeRemained} days",style: TextStyle(fontSize: 10,fontWeight: FontWeight.bold),)
+              ],
             ),
-          )
-        ],
+            Expanded(
+              child: Container(
+                // color: Colors.blue,
+                child: Column(
+                  children: [
+                    Center(
+                      child: Text(targetName),
+                    ),
+                    Center(
+                      child: Text(
+                        targetAmount.toString(),
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          ],
+        ),
       ),
     );
   }

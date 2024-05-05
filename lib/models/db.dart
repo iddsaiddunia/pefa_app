@@ -1,5 +1,6 @@
 // import 'dart:async';
 // import 'package:path/path.dart';
+// import 'package:pfa_app/models/user_model.dart';
 // import 'package:sqflite/sqflite.dart';
 //
 // class DatabaseHelper {
@@ -14,23 +15,23 @@
 //
 //   void _createDb(Database db, int newVersion) async {
 //     await db.execute('''
-//       CREATE TABLE user (
+//       CREATE TABLE users (
 //        id INTEGER PRIMARY KEY, username TEXT, email TEXT, phone TEXT, password TEXT
 //       )
 //     ''');
 //   }
 //
-// //   Future<int> insertProduct(List<SaleProduct> products) async {
-// //     int result = 0;
-// //     Database db = await initializeDB();
-// //     for (var product in products) {
-// //       result = await db.insert('products', product.toMap(),
-// //           conflictAlgorithm: ConflictAlgorithm.replace);
-// //     }
-// //
-// //     return result;
-// //     // return await db.insert('products', product.toMap());
-// //   }
+//   // Future<int> registerUser(User user) async {
+//   //   int result = 0;
+//   //   Database db = await initializeDB();
+//   //
+//   //     result = await db.insert('users', user.toMap(),
+//   //         conflictAlgorithm: ConflictAlgorithm.replace);
+//   //   }
+//   //
+//   //   return result;
+//   //   // return await db.insert('products', product.toMap());
+//   // }
 // //
 // //   Future<List<SaleProduct>> getProducts() async {
 // //     Database db = await initializeDB();

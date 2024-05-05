@@ -2,6 +2,7 @@ import 'dart:ffi';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:pfa_app/color_themes.dart';
 
 class ChatBot extends StatefulWidget {
   const ChatBot({super.key});
@@ -59,13 +60,13 @@ class _ChatBotState extends State<ChatBot> {
                   width: 55,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: color.buttonColor,
                     borderRadius: BorderRadius.all(
                       Radius.circular(8),
                     ),
                   ),
                   child: Center(
-                    child: Icon(Icons.send),
+                    child: Icon(Icons.send,color: Colors.white,),
                   ),
                 ),
               ],
@@ -84,41 +85,25 @@ class BotChatBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.all(
-                Radius.circular(22),
-              ),
-            ),
-            child: Center(
-              child: Icon(Icons.headset_mic),
-            ),
-          ),
-          Padding(
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+          widthFactor: 0.9,
+        child: Container(
+          margin: EdgeInsets.symmetric(vertical: 20),
+          child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Container(
               padding:
                   EdgeInsets.symmetric(horizontal: 10, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.only(topRight: Radius.circular(5),bottomRight:Radius.circular(5), bottomLeft: Radius.circular(16) ),
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(15),topRight: Radius.circular(15),bottomRight:Radius.circular(15), bottomLeft: Radius.circular(2) ),
               ),
-              child: Center(
-                child: Text("hello  world hdbdbvhid"),
-              ),
+              child: Text("hello  world hdbdbvhid hbsijcincncncndncndhbhcbd",style: TextStyle(fontSize:13,),maxLines: 10,softWrap: true,overflow: TextOverflow.ellipsis,),
             ),
-          )
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -129,29 +114,21 @@ class ClientChatBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Container(
-              padding:
-              EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(topRight: Radius.circular(5),bottomRight:Radius.circular(5), bottomLeft: Radius.circular(16) ),
-              ),
-              child: Center(
-                child: Text("hello  world hdbdbvhid"),
-              ),
-            ),
-          )
-        ],
+    return Align(
+      alignment: Alignment.centerRight,
+      child: FractionallySizedBox(
+        widthFactor: 0.7,
+        child: Container(
+          padding:
+          EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            borderRadius: BorderRadius.only(topLeft:Radius.circular(15), topRight: Radius.circular(15),bottomRight:Radius.circular(2), bottomLeft: Radius.circular(15) ),
+          ),
+          child: Center(
+            child: Text("can i get my monthly financial report",style: TextStyle(fontSize:13,color: Colors.white),maxLines: 4,softWrap: true,overflow: TextOverflow.ellipsis,),
+          ),
+        ),
       ),
     );
   }
