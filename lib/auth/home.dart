@@ -26,15 +26,21 @@ class _HomePageState extends State<HomePage> {
   int _selectedLoanType = 0;
   String dropdownvalue = 'Cash';
   String purposedropdownvalue = 'Target';
+  String transactionTypevalue = 'Expense';
 
   bool isInsightOpen = true;
-  bool addTransaction = false
-  ;
+  bool addTransaction = false;
+  bool isTransLoading = false;
+
   // List of items in our dropdown menu
   var items = [
     'Cash',
     'Mobile Transaction',
     'Bank Transaction',
+  ];
+  var transactionType = [
+    'Expense',
+    'Income',
   ];
   var purposeItems =[
     "Target", "Saving", "Bill","Loan"
@@ -55,25 +61,27 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  addTargetWindow() {
+  addSavingsWindow() {
     showDialog(
         context: context,
         builder: (BuildContext contex) {
           return AlertDialog(
             title: Text(
-              "Add new Loan",
+              "Add Saving",
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600),
             ),
             actions: [
               IconButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.pop(context);
+                },
                 icon: Icon(Icons.cancel),
               ),
             ],
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text("hello"),
+                Text("this is my saving window"),
               ],
             ),
           );
@@ -147,6 +155,17 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> addTransactionFn() async {
+    // Simulate a login request
+    setState(() {
+      isTransLoading = true;
+    });
+
+    await Future.delayed(Duration(seconds: 2));
+    setState(() {
+      isTransLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -331,21 +350,26 @@ class _HomePageState extends State<HomePage> {
                             ),
                           ),
                         ),
-                        Container(
-                          width: double.infinity,
-                          height: 40.0,
-                          margin: EdgeInsets.symmetric(vertical: 5.0),
-                          decoration: BoxDecoration(
-                            border:
-                                Border.all(width: 2, color: color.primaryColor),
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(8),
+                        GestureDetector(
+                          onTap: (){
+                            addSavingsWindow();
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            height: 40.0,
+                            margin: EdgeInsets.symmetric(vertical: 5.0),
+                            decoration: BoxDecoration(
+                              border:
+                                  Border.all(width: 2, color: color.primaryColor),
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(8),
+                              ),
                             ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              "Add saving",
-                              style: TextStyle(fontWeight: FontWeight.w600),
+                            child: Center(
+                              child: Text(
+                                "Add saving",
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
                             ),
                           ),
                         ),
@@ -367,18 +391,23 @@ class _HomePageState extends State<HomePage> {
                               style: TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.w600),
                             ),
-                            Row(
-                              children: [
-                                Text("View all"),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 5.0),
-                                  child: Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 15,
+                            GestureDetector(
+                              onTap: (){
+                                Navigator.push(context, MaterialPageRoute(builder: (context)=>LoansPage()));
+                              },
+                              child: Row(
+                                children: [
+                                  Text("View all"),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5.0),
+                                    child: Icon(
+                                      Icons.arrow_forward_ios,
+                                      size: 15,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             )
                           ],
                         ),
@@ -569,7 +598,7 @@ class _HomePageState extends State<HomePage> {
                             child: TabBarView(
                               children: [
                                 Container(
-                                  child: Column(
+                                  child: ListView(
                                     children: [
                                       Container(
                                         width: double.infinity,
@@ -590,13 +619,13 @@ class _HomePageState extends State<HomePage> {
                                           isExpanded: true,
                                           elevation: 0,
                                           // Initial Value
-                                          value: purposedropdownvalue,
+                                          value: transactionTypevalue,
                                           // Down Arrow Icon
                                           icon: const Icon(
                                               Icons.keyboard_arrow_down),
 
                                           // Array list of items
-                                          items: purposeItems.map((String items) {
+                                          items: transactionType.map((String items) {
                                             return DropdownMenuItem(
                                               value: items,
                                               child: Text(items),
@@ -606,12 +635,12 @@ class _HomePageState extends State<HomePage> {
                                           // change button value to selected value
                                           onChanged: (String? newValue) {
                                             setState(() {
-                                              purposedropdownvalue = newValue!;
+                                              transactionTypevalue = newValue!;
                                             });
                                           },
                                         ),
                                       ),
-                                      Container(
+                    (transactionTypevalue == "Expense")?Container(
                                         width: double.infinity,
                                         height: 50,
                                         padding: EdgeInsets.symmetric(
@@ -650,7 +679,7 @@ class _HomePageState extends State<HomePage> {
                                             });
                                           },
                                         ),
-                                      ),
+                                      ):Container(),
                                       InputBox(
                                         title: "Amount",
                                       ),
@@ -703,13 +732,15 @@ class _HomePageState extends State<HomePage> {
                                         minWidth: double.infinity,
                                         height: 50,
                                         color: color.buttonColor,
-                                        onPressed: () {},
-                                        child: Text(
+                                        onPressed: () {
+                                          addTransactionFn();
+                                        },
+                                        child: (!isTransLoading)?Text(
                                           "Add Transaction",
                                           style: TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w600),
-                                        ),
+                                        ): CircularProgressIndicator(color: Colors.white),
                                       )
                                     ],
                                   ),

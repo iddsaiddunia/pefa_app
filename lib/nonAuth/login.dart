@@ -16,6 +16,7 @@ class _LoginPageState extends State<LoginPage> {
   TextEditingController passwordController = TextEditingController();
 
   bool isLoading = false;
+  bool isTransLoading = false;
   int selectedIndex = 0;
 
   Future<void> authenticateUser() async {
@@ -63,6 +64,8 @@ class _LoginPageState extends State<LoginPage> {
       isLoading = false;
     });
   }
+
+
 
   @override
   Widget build(BuildContext context) {
