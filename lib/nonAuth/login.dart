@@ -1,8 +1,10 @@
-import 'package:flutter/cupertino.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:pfa_app/color_themes.dart';
 import 'package:pfa_app/nonAuth/register.dart';
+import 'package:pfa_app/services/auth_services.dart';
 import 'package:pfa_app/wrapper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -15,9 +17,12 @@ class _LoginPageState extends State<LoginPage> {
   TextEditingController emailController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
 
+  final AuthService _authService = AuthService();
+
   bool isLoading = false;
   bool isTransLoading = false;
   int selectedIndex = 0;
+  String _errorMessage = '';
 
   Future<void> authenticateUser() async {
     // Simulate a login request
@@ -25,7 +30,7 @@ class _LoginPageState extends State<LoginPage> {
       isLoading = true;
     });
 
-    await Future.delayed(Duration(seconds: 2)); // Simulate network delay
+    await Future.delayed(const Duration(seconds: 2)); // Simulate network delay
 
     // Replace this with your actual authentication logic
     if (emailController.text == 'user@mail.com' &&
@@ -34,7 +39,7 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => Wrapper(
+          builder: (context) => const Wrapper(
             isSignedIn: true,
           ),
         ),
@@ -45,14 +50,14 @@ class _LoginPageState extends State<LoginPage> {
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: Text('Authentication Failed'),
-            content: Text('Invalid username or password.'),
+            title: const Text('Authentication Failed'),
+            content: const Text('Invalid username or password.'),
             actions: [
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
-                child: Text('OK'),
+                child: const Text('OK'),
               ),
             ],
           );
@@ -65,7 +70,52 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
+  Future<void> _login(String email, String password) async {
+    setState(() {
+      isLoading = true;
+    });
 
+    if (email == '' || password == '') {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Alert!'),
+            content: const Text('Fill all fields'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+      setState(() {
+        isLoading = false;
+      });
+    } else {
+      final token = await _authService.login(email, password);
+
+      if (token != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const Wrapper(
+              isSignedIn: true,
+            ),
+          ),
+        );
+      } else {
+        setState(() {
+          _errorMessage = 'Login failed. Please check your credentials.';
+          isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,18 +127,18 @@ class _LoginPageState extends State<LoginPage> {
             width: double.infinity,
             height: MediaQuery.of(context).size.height / 3.3,
             color: Colors.transparent),
-        SizedBox(
+        const SizedBox(
           height: 20.0,
         ),
-        Text(
+        const Text(
           "Login",
           style: TextStyle(fontSize: 26),
         ),
-        Text(
+        const Text(
           "Please Sign in to continue.",
           style: TextStyle(fontSize: 16),
         ),
-        SizedBox(
+        const SizedBox(
           height: 20.0,
         ),
         Container(
@@ -96,69 +146,78 @@ class _LoginPageState extends State<LoginPage> {
           height: 55.0,
           decoration: BoxDecoration(
             color: Colors.blue[50],
-            borderRadius: BorderRadius.all(
+            borderRadius: const BorderRadius.all(
               Radius.circular(30),
             ),
           ),
           child: TextField(
             controller: emailController,
-            decoration: InputDecoration(
-                prefixIcon: Icon(Icons.email,color: Colors.deepOrangeAccent,),
+            decoration: const InputDecoration(
+                prefixIcon: Icon(
+                  Icons.email,
+                  color: Colors.deepOrangeAccent,
+                ),
                 hintText: "Email",
                 border: InputBorder.none),
           ),
         ),
-        SizedBox(height: 20),
+        const SizedBox(height: 20),
         Container(
           width: double.infinity,
           height: 55.0,
           decoration: BoxDecoration(
             color: Colors.blue[50],
-            borderRadius: BorderRadius.all(
+            borderRadius: const BorderRadius.all(
               Radius.circular(30),
             ),
           ),
           child: TextField(
             controller: passwordController,
             obscureText: true,
-            decoration: InputDecoration(
-                prefixIcon: Icon(Icons.lock,color: Colors.deepOrangeAccent,),
+            decoration: const InputDecoration(
+                prefixIcon: Icon(
+                  Icons.lock,
+                  color: Colors.deepOrangeAccent,
+                ),
                 hintText: "Password",
                 border: InputBorder.none),
           ),
         ),
-        Align(
+        const Align(
             alignment: Alignment.centerRight, child: Text("forgot password?")),
-        SizedBox(height: 30),
+        const SizedBox(height: 30),
         GestureDetector(
           onTap: () {
-            authenticateUser();
+            // authenticateUser();
+            _login(emailController.text, passwordController.text);
           },
           child: Container(
             width: double.infinity,
             height: 60.0,
             decoration: BoxDecoration(
               color: color.buttonColor,
-              borderRadius: BorderRadius.all(
+              borderRadius: const BorderRadius.all(
                 Radius.circular(30),
               ),
             ),
             child: Center(
               child: isLoading
-                  ? CircularProgressIndicator(
+                  ? const CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(
                         Colors.white,
                       ),
                     )
-                  : Text(
+                  : const Text(
                       "Sign In",
-                      style:
-                          TextStyle(fontSize: 17, fontWeight: FontWeight.w600,color: Colors.white),
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white),
                     ),
             ),
           ),
         ),
-        SizedBox(
+        const SizedBox(
           height: 10.0,
         ),
         Center(
@@ -166,10 +225,11 @@ class _LoginPageState extends State<LoginPage> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => RegistrationPage()),
+                MaterialPageRoute(
+                    builder: (context) => const RegistrationPage()),
               );
             },
-            child: Text(
+            child: const Text(
               "Don't have an account?Sign Up",
               style: TextStyle(fontSize: 16),
             ),

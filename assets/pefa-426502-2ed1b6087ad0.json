@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "pefa-426502",
+  "private_key_id": "2ed1b6087ad0a5c5da0cf05dc48693946b944b7e",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCZW4xA0mLPGrt/\n6HhuB6uunAHSuma9kJ5eOEJ6Ro8cKzkhdXJLvCVdWN16RUVrDzDOx3Mg5+dc5Tx2\n1f/wkVLQH7N+P6obp9MBGh8nr2COwLq/8+ldN/NgorLO3Om2wMbUq2QHVoLEchHe\nW1Q24aVVQcAmLWan1BLnVLZXoBlIMVt84eB6cNkY8qGLH5yFqFVB2yBz39yuMNhO\ntMd4hFaHByYUVoj4PTYx5dtIxp8YmM5Ktn8psWSRiv0jbnubdzJuICgPjfrVpkc2\nND+2e62130qnFlnsofmEI+3PFtj9cmkip+34iFszJDPT/9LQxR0D2x6FGC8fbi8M\nGTg75LaHAgMBAAECggEAQEjv8fw/DzHVhzibwwPUI82htgQNLUmCGVzcAQWy18wG\nls/0qWqk/wxRSv/eqZIkk4ln6VNM2NP/FJGASAei/ztKspFdbVpcSQn6JViO0UhZ\nAD3uhPT/QHLzIWPZVJJaxqtRswHArzhh5SPDmX3dIG//bAF8Fr3/bplEFlc2QdxI\nOWGEP/jvzUGiyqjRKRJ7d3PXV0N2exJd1Smk0p7yBIK6xNUBeqtTYTutdiz2m5E0\njQUF7e2EIxEktH789C10FJu2sf0ZEcOMpn5718CNKShDEHzocuWpw90sIzbOEbLA\nWdwl+lp7k34l47CdlQGmPQoINPVzPr1IVQU5MWIRgQKBgQDVesLHDsINIwWQapaY\nV5iPMA8sBaDFnAWoShYSjW++2HuT55Nv4kNNLknQnkMF3KoiW243BJoRxuNMXwCw\nuLafriFcM5KL3KYaZF2GPybi68UY0W0sOBvn6bIavigEpgys+GH+QPGZz2edpSXx\noyFfmqRbkqBiqD/ZFFJiqBrWfQKBgQC35zF12Nkkd3ppIQX/sHze4E2IFSJ8BgJm\nqqUGXDXMR+wLK96fRsLDLOsTS+OlrcUSh7g59AGJNOmE4VG/rIhvizd/PqYyJs4X\n2jvKZ7Wo2poBmDuoaf4fh5f+TP3gVssaIMN6USefag6m3WIkhJIKp9UNzamredwe\nCPIW0gGcUwKBgBWQXPR2jSt+iiVYXvXsg0CTfjTYLLFJXVjuguRE3TDN9U2vark2\nhc3aCyLDmcmRzK3DxpJQKK/7AyLHxe4T+n6OvFfv7bGrDCxGTxwsbOUnI7WqEfkR\ngeAfPxpscuZlT4p5XIyuSrlatgC6meaar9hUap3FZeYRUMHAx8GncW6RAoGALf3t\nyrEurQYMYRpXK7jxobOq8CuI8kd2dkKa/to0wiACklCoXmEN+E3VhH/oMNkifh3f\nHu89KxlGhWrsTOlTPcItYO9EFSrLQ//aECabsdzpwxhVYysO2MfKZVjP7TkHlkM3\nX/HH3QBjJawcDVHyTCPpDoiutCnHuOM32CkxKe0CgYEAgZTEh5Us0+t5mp61UxFR\nztc/kv5/7GOcozCcF9RdSxrOKnxnZqbL1SIMWiXREWllWWIp4gLwOlLap+S85DGW\neFrRnmgbEHLhevtTfAsqLDXLH3/k5CupSGTza0oqFK955/ZpaDE01AYkrULvIFkb\n1uSNuT4JHJjVxoSdvsPcrgM=\n-----END PRIVATE KEY-----\n",
+  "client_email": "pefa-bot@pefa-426502.iam.gserviceaccount.com",
+  "client_id": "113489338972807412096",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/pefa-bot%40pefa-426502.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

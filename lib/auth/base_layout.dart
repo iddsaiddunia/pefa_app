@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart';
 import 'package:pfa_app/auth/about.dart';
 import 'package:pfa_app/auth/add_loan.dart';
 import 'package:pfa_app/auth/add_target.dart';
@@ -11,6 +12,8 @@ import 'package:pfa_app/auth/savings.dart';
 import 'package:pfa_app/auth/transactions.dart';
 import 'package:pfa_app/color_themes.dart';
 import 'package:pfa_app/components.dart';
+import 'package:pfa_app/services/auth_services.dart';
+import 'package:pfa_app/wrapper.dart';
 
 ColorThemes _colorThemes = new ColorThemes();
 
@@ -24,6 +27,7 @@ class BaseLayout extends StatefulWidget {
 class _BaseLayoutState extends State<BaseLayout>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  final AuthService _authService = AuthService();
 
   int _currentIndex = 0;
   PageController _pageController = PageController();
@@ -59,9 +63,9 @@ class _BaseLayoutState extends State<BaseLayout>
               decoration: BoxDecoration(color: color.primaryColor),
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 30),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8.0, vertical: 30),
                   child: Row(
-
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       CircleAvatar(
@@ -72,8 +76,18 @@ class _BaseLayoutState extends State<BaseLayout>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("John Doe",style: TextStyle(fontWeight: FontWeight.bold,color: Colors.white),),
-                            Text("johndoe@mail.com",style: TextStyle(fontWeight: FontWeight.w200,color: Colors.white),),
+                            Text(
+                              "John Doe",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white),
+                            ),
+                            Text(
+                              "johndoe@mail.com",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w200,
+                                  color: Colors.white),
+                            ),
                           ],
                         ),
                       )
@@ -86,25 +100,81 @@ class _BaseLayoutState extends State<BaseLayout>
               child: Container(
                 child: Column(
                   children: [
-                    SizedBox(height: 20,),
-                    DrawerTile(title: "Profile", ontap: (){
-                      Navigator.push(context, MaterialPageRoute(builder: (context)=>ProfilePage(),),);
-                    },icon: Icons.person_3_outlined,),
-                    DrawerTile(title: "Targets", ontap: (){
-                      Navigator.push(context, MaterialPageRoute(builder: (context)=>TargetsPage(),),);
-                    },icon: Icons.add_chart,),
-                    DrawerTile(title: "Transactions", ontap: (){
-                      Navigator.push(context, MaterialPageRoute(builder: (context)=>TransactionPage(),),);
-                    },icon: Icons.monetization_on_outlined,),
-                    DrawerTile(title: "Savings", ontap: (){
-                      Navigator.push(context, MaterialPageRoute(builder: (context)=>SavingsPage(),),);
-                    },icon: Icons.lightbulb_circle_outlined,),
-                    DrawerTile(title: "Loans", ontap: (){
-                      Navigator.push(context, MaterialPageRoute(builder: (context)=>LoansPage(),),);
-                    },icon: Icons.list_alt_outlined,),
-                    DrawerTile(title: "About", ontap: (){
-                      Navigator.push(context, MaterialPageRoute(builder: (context)=>AboutPage(),),);
-                    },icon: Icons.question_answer_outlined,),
+                    SizedBox(
+                      height: 20,
+                    ),
+                    DrawerTile(
+                      title: "Profile",
+                      ontap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(),
+                          ),
+                        );
+                      },
+                      icon: Icons.person_3_outlined,
+                    ),
+                    DrawerTile(
+                      title: "Targets",
+                      ontap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TargetsPage(),
+                          ),
+                        );
+                      },
+                      icon: Icons.add_chart,
+                    ),
+                    DrawerTile(
+                      title: "Transactions",
+                      ontap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TransactionPage(),
+                          ),
+                        );
+                      },
+                      icon: Icons.monetization_on_outlined,
+                    ),
+                    DrawerTile(
+                      title: "Savings",
+                      ontap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SavingsPage(),
+                          ),
+                        );
+                      },
+                      icon: Icons.lightbulb_circle_outlined,
+                    ),
+                    DrawerTile(
+                      title: "Loans",
+                      ontap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => LoansPage(),
+                          ),
+                        );
+                      },
+                      icon: Icons.list_alt_outlined,
+                    ),
+                    DrawerTile(
+                      title: "About",
+                      ontap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => AboutPage(),
+                          ),
+                        );
+                      },
+                      icon: Icons.question_answer_outlined,
+                    ),
                   ],
                 ),
               ),
@@ -114,24 +184,36 @@ class _BaseLayoutState extends State<BaseLayout>
                 Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: MaterialButton(
-                    minWidth: 120,
-                    height: 50,
-                    elevation: 0,
-                    color: color.buttonColor,
-                    child: Row(
-                      children: [Icon(Icons.logout), Text("LogOut")],
-                    ),
-                      onPressed: (){
-
-                  }),
+                      minWidth: 120,
+                      height: 50,
+                      elevation: 0,
+                      color: color.buttonColor,
+                      child: Row(
+                        children: [Icon(Icons.logout), Text("LogOut")],
+                      ),
+                      onPressed: () async {
+                        await _authService.logout(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => Wrapper(isSignedIn: false),
+                          ),
+                        );
+                      }),
                 ),
-                SizedBox(height: 20,),
+                SizedBox(
+                  height: 20,
+                ),
                 Text("Developed by UDOM/S.G4"),
-                Text("2024@ Pefa All rights reserved",style: TextStyle(color: Colors.black87,fontSize: 11),),
-                SizedBox(height: 20,),
+                Text(
+                  "2024@ Pefa All rights reserved",
+                  style: TextStyle(color: Colors.black87, fontSize: 11),
+                ),
+                SizedBox(
+                  height: 20,
+                ),
               ],
             ),
-
           ],
         ),
       ),
@@ -140,7 +222,12 @@ class _BaseLayoutState extends State<BaseLayout>
         actions: [
           IconButton(
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context)=>NotificationPage(),),);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NotificationPage(),
+                ),
+              );
             },
             icon: Icon(
               Icons.notifications,
@@ -220,10 +307,13 @@ class DrawerTile extends StatelessWidget {
     return GestureDetector(
       onTap: ontap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10.0,vertical: 15),
+        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 15),
         child: Row(
           children: [
-            Icon(icon,color: Colors.orange,),
+            Icon(
+              icon,
+              color: Colors.orange,
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18.0),
               child: Text(title),
