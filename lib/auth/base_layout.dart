@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:path/path.dart';
 import 'package:pfa_app/auth/about.dart';
 import 'package:pfa_app/auth/add_loan.dart';
@@ -38,10 +39,28 @@ class _BaseLayoutState extends State<BaseLayout>
     // const SettingPage(),
   ];
 
+  late Future<Map<String, dynamic>?> _userFuture;
+bool _isConnected = false;
+
+ 
+
+ 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this);
+    _userFuture = _authService.fetchUserDetails();
+    checkConnectivity();
+    InternetConnectionChecker().onStatusChange.listen((status) {
+      setState(() {
+        _isConnected = status == InternetConnectionStatus.connected;
+      });
+    });
+  }
+
+   Future<void> checkConnectivity() async {
+    _isConnected = await InternetConnectionChecker().hasConnection;
+    setState(() {});
   }
 
   @override
@@ -62,37 +81,52 @@ class _BaseLayoutState extends State<BaseLayout>
               height: 150,
               decoration: BoxDecoration(color: color.primaryColor),
               child: SafeArea(
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8.0, vertical: 30),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CircleAvatar(
-                        radius: 30,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Column(
+                child: FutureBuilder<Map<String, dynamic>?>(
+                  future: _userFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    } else if (snapshot.hasError) {
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    } else if (!snapshot.hasData) {
+                      return Center(child: Text('User not found'));
+                    } else {
+                      Map<String, dynamic> user = snapshot.data!;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8.0, vertical: 30),
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              "John Doe",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white),
+                            CircleAvatar(
+                              radius: 30,
                             ),
-                            Text(
-                              "johndoe@mail.com",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w200,
-                                  color: Colors.white),
-                            ),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user['username'],
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white),
+                                  ),
+                                  Text(
+                                    user['email'],
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w200,
+                                        color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            )
                           ],
                         ),
-                      )
-                    ],
-                  ),
+                      );
+                    }
+                  },
                 ),
               ),
             ),
@@ -127,18 +161,18 @@ class _BaseLayoutState extends State<BaseLayout>
                       },
                       icon: Icons.add_chart,
                     ),
-                    DrawerTile(
-                      title: "Transactions",
-                      ontap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => TransactionPage(),
-                          ),
-                        );
-                      },
-                      icon: Icons.monetization_on_outlined,
-                    ),
+                    // DrawerTile(
+                    //   title: "Transactions",
+                    //   ontap: () {
+                    //     Navigator.push(
+                    //       context,
+                    //       MaterialPageRoute(
+                    //         builder: (context) => TransactionPage(),
+                    //       ),
+                    //     );
+                    //   },
+                    //   icon: Icons.monetization_on_outlined,
+                    // ),
                     DrawerTile(
                       title: "Savings",
                       ontap: () {
@@ -163,18 +197,18 @@ class _BaseLayoutState extends State<BaseLayout>
                       },
                       icon: Icons.list_alt_outlined,
                     ),
-                    DrawerTile(
-                      title: "About",
-                      ontap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => AboutPage(),
-                          ),
-                        );
-                      },
-                      icon: Icons.question_answer_outlined,
-                    ),
+                    // DrawerTile(
+                    //   title: "About",
+                    //   ontap: () {
+                    //     Navigator.push(
+                    //       context,
+                    //       MaterialPageRoute(
+                    //         builder: (context) => AboutPage(),
+                    //       ),
+                    //     );
+                    //   },
+                    //   icon: Icons.question_answer_outlined,
+                    // ),
                   ],
                 ),
               ),
@@ -189,7 +223,16 @@ class _BaseLayoutState extends State<BaseLayout>
                       elevation: 0,
                       color: color.buttonColor,
                       child: Row(
-                        children: [Icon(Icons.logout), Text("LogOut")],
+                        children: [
+                          Icon(Icons.logout, color: Colors.white),
+                          Text(
+                            "Logout",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
                       onPressed: () async {
                         await _authService.logout(context);
@@ -204,7 +247,7 @@ class _BaseLayoutState extends State<BaseLayout>
                 SizedBox(
                   height: 20,
                 ),
-                Text("Developed by UDOM/S.G4"),
+                Text("Developed by Udom Students"),
                 Text(
                   "2024@ Pefa All rights reserved",
                   style: TextStyle(color: Colors.black87, fontSize: 11),
@@ -219,21 +262,22 @@ class _BaseLayoutState extends State<BaseLayout>
       ),
       appBar: AppBar(
         // automaticallyImplyLeading: false,
+        title: Text("PEFA APP"),
         actions: [
-          IconButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => NotificationPage(),
-                ),
-              );
-            },
-            icon: Icon(
-              Icons.notifications,
-              color: Colors.black54,
-            ),
-          ),
+          // IconButton(
+          //   onPressed: () {
+          //     Navigator.push(
+          //       context,
+          //       MaterialPageRoute(
+          //         builder: (context) => NotificationPage(),
+          //       ),
+          //     );
+          //   },
+          //   icon: Icon(
+          //     Icons.notifications,
+          //     color: Colors.black54,
+          //   ),
+          // ),
         ],
       ),
       body: PageView(

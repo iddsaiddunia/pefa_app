@@ -1,6 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:pfa_app/color_themes.dart';
+import 'package:pfa_app/nonAuth/forgot_password.dart';
 import 'package:pfa_app/nonAuth/register.dart';
 import 'package:pfa_app/services/auth_services.dart';
 import 'package:pfa_app/wrapper.dart';
@@ -23,6 +27,24 @@ class _LoginPageState extends State<LoginPage> {
   bool isTransLoading = false;
   int selectedIndex = 0;
   String _errorMessage = '';
+
+  bool _isConnected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    checkConnectivity();
+    InternetConnectionChecker().onStatusChange.listen((status) {
+      setState(() {
+        _isConnected = status == InternetConnectionStatus.connected;
+      });
+    });
+  }
+
+  Future<void> checkConnectivity() async {
+    _isConnected = await InternetConnectionChecker().hasConnection;
+    setState(() {});
+  }
 
   Future<void> authenticateUser() async {
     // Simulate a login request
@@ -75,45 +97,50 @@ class _LoginPageState extends State<LoginPage> {
       isLoading = true;
     });
 
-    if (email == '' || password == '') {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('Alert!'),
-            content: const Text('Fill all fields'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                child: const Text('OK'),
+    if (_isConnected) {
+      if (email == '' || password == '') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fill all fields.'),
+          ),
+        );
+        setState(() {
+          isLoading = false;
+        });
+      } else {
+        final token = await _authService.login(email, password);
+
+        if (token != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const Wrapper(
+                isSignedIn: true,
               ),
-            ],
+            ),
           );
-        },
+        } else {
+          setState(() {
+            _errorMessage = 'Login failed. Please check your credentials.';
+            isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$_errorMessage'),
+        ),
       );
+
+        }
+      }
+    } else {
       setState(() {
         isLoading = false;
       });
-    } else {
-      final token = await _authService.login(email, password);
-
-      if (token != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const Wrapper(
-              isSignedIn: true,
-            ),
-          ),
-        );
-      } else {
-        setState(() {
-          _errorMessage = 'Login failed. Please check your credentials.';
-          isLoading = false;
-        });
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No Internet connection'),
+        ),
+      );
     }
   }
 
@@ -124,9 +151,10 @@ class _LoginPageState extends State<LoginPage> {
       padding: const EdgeInsets.symmetric(horizontal: 18.0),
       child: ListView(children: [
         Container(
-            width: double.infinity,
-            height: MediaQuery.of(context).size.height / 3.3,
-            color: Colors.transparent),
+          width: double.infinity,
+          height: MediaQuery.of(context).size.height / 3.3,
+          color: Colors.transparent,
+        ),
         const SizedBox(
           height: 20.0,
         ),
@@ -183,8 +211,19 @@ class _LoginPageState extends State<LoginPage> {
                 border: InputBorder.none),
           ),
         ),
-        const Align(
-            alignment: Alignment.centerRight, child: Text("forgot password?")),
+        Align(
+          alignment: Alignment.centerRight,
+          child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ForgotPasswordPage(),
+                  ),
+                );
+              },
+              child: Text("forgot password?")),
+        ),
         const SizedBox(height: 30),
         GestureDetector(
           onTap: () {

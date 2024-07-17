@@ -28,7 +28,7 @@ class AuthService {
       if (response.statusCode == 200) {
         final String token = jsonDecode(response.body)['access'];
         await _saveToken(token);
-        await fetchUserDetails(token);
+        await fetchUserDetails();
         return token;
       } else {
         return null;
@@ -39,7 +39,7 @@ class AuthService {
   }
 
   Future<Map<String, dynamic>?> signup(String username, String email,
-      String phoneNumber, String password) async {
+      String phoneNumber, String password, String secret_word) async {
     final String signupUrl =
         'https://pefa-432220d0c209.herokuapp.com/auth/signup/';
     try {
@@ -53,14 +53,17 @@ class AuthService {
           'email': email,
           'phone_number': phoneNumber,
           'password': password,
+          'secret_word': secret_word,
         }),
       );
 
       if (response.statusCode == 201) {
         var data = jsonDecode(response.body);
+        print(data);
         return {'success': true, 'data': data};
       } else {
         var errorData = jsonDecode(response.body);
+        print(errorData);
         return {'success': false, 'error': errorData};
       }
     } catch (e) {
@@ -69,9 +72,9 @@ class AuthService {
     }
   }
 
-  Future<Map<String, dynamic>?> fetchUserDetails(String token) async {
-    // Decode the JWT token to extract the user ID
-    final userId = _extractUserIdFromToken(token);
+  Future<Map<String, dynamic>?> fetchUserDetails() async {
+    String? token = await getToken();
+    final userId = _extractUserIdFromToken(token!);
 
     if (userId != null) {
       final response = await http.get(
@@ -111,6 +114,41 @@ class AuthService {
     }
   }
 
+  Future<Map<String, dynamic>?> updateUser(
+      int id, Map<String, dynamic> data) async {
+    String? token = await getToken();
+
+    final response = await http.put(
+      Uri.parse('$_baseUrl/auth/users/$id/'), // Ensure trailing slash here
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(data),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to update user');
+    }
+  }
+
+  Future<void> deleteUser(int id) async {
+    String? token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/users/$id/'),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete user');
+    }
+  }
+
   Future<void> logout(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
@@ -126,5 +164,57 @@ class AuthService {
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('jwt_token');
+  }
+
+  Future<String> forgotPassword(
+      String username, String contact, String secretWord) async {
+    final url = Uri.parse(
+        'https://pefa-432220d0c209.herokuapp.com/auth/forgot-password/');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: json.encode({
+        'username': username,
+        'contact': contact,
+        'secret_word': secretWord,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['new_password'];
+    } else {
+      throw Exception('Failed to reset password');
+    }
+  }
+
+  Future<void> changePassword(
+      String currentPassword, String newPassword) async {
+    String? token = await getToken();
+
+    final url = Uri.parse(
+        'https://pefa-432220d0c209.herokuapp.com/auth/change-password/');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'old_password': currentPassword,
+        'new_password': newPassword,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      // Password changed successfully
+      print('Password changed successfully');
+    } else {
+      // Handle error
+      print('Failed to change password: ${response.statusCode}');
+      throw Exception('Failed to change password');
+    }
   }
 }

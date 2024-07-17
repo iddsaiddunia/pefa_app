@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:dialogflow_flutter/dialogflowFlutter.dart';
@@ -27,7 +26,6 @@ import 'package:dialogflow_flutter/language.dart';
 //   }
 // }
 
-
 // import 'package:dialogflow_v2/dialogflow_v2.dart';
 
 class DialogflowService {
@@ -48,8 +46,9 @@ class DialogflowService {
   Future<AIResponse> sendQuery(String query) async {
     AIResponse response = await dialogflow.detectIntent(query);
     print("Fulfillment Text: ${response.queryResult!.fulfillmentText}");
-    print("Intent Display Name: ${response.queryResult!.parameters!['ServiceType']}");
-   
+    print(
+        "Intent Display Name: ${response.queryResult!.parameters!['ServiceType']}");
+
     return response;
   }
 }

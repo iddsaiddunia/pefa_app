@@ -82,7 +82,7 @@ class SavingService {
       List<Saving> savings =
           list.map((model) => Saving.fromJson(model)).toList();
       double totalAmount = savings.fold(0.0, (sum, item) => sum + item.amount);
-      // print("total amount------------>$totalAmount");
+      print("total amount------------>$totalAmount");
       return totalAmount;
     } else {
       throw Exception('Failed to load savings');

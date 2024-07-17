@@ -93,8 +93,13 @@ class _ChatBotState extends State<ChatBot> {
         body: json.encode({
           "queryResult": {
             "queryText": response.queryResult!.queryText,
-            "parameters": {"ServiceType": serviceType},
-            "intent": {"displayName": serviceType}
+            "parameters": {
+              "duration": "",
+              "ServiceType": response.queryResult!.parameters!['ServiceType']
+            },
+            "intent": {
+              "displayName": response.queryResult!.parameters!['ServiceType']
+            }
           }
         }),
       );
@@ -110,15 +115,15 @@ class _ChatBotState extends State<ChatBot> {
           _messages.insert(0, backendMessage);
         });
       } else {
-        ChatMessage errorMessage = ChatMessage(
-          text:
-              "Sorry i am having trouble fetching data please try again in a while thank!",
-          name: "Bot",
-          type: false,
-        );
-        setState(() {
-          _messages.insert(0, errorMessage);
-        });
+        // ChatMessage errorMessage = ChatMessage(
+        //   text:
+        //       "Sorry i am having trouble fetching data please try again in a while thank!",
+        //   name: "Bot",
+        //   type: false,
+        // );
+        // setState(() {
+        //   _messages.insert(0, errorMessage);
+        // });
       }
     } catch (e) {
       print("Error sending request: $e");
@@ -291,7 +296,7 @@ class BotChatBox extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                 ),
-                maxLines: 10,
+                maxLines: 200,
                 softWrap: true,
                 overflow: TextOverflow.ellipsis,
               ),

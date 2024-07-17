@@ -3,11 +3,10 @@ import 'package:http/http.dart' as http;
 import 'package:pfa_app/models/transaction_model.dart';
 import 'package:pfa_app/services/auth_services.dart';
 
-
 AuthService _authService = AuthService();
+
 class TransactionService {
   final String baseUrl = 'https://pefa-432220d0c209.herokuapp.com';
-
 
   Future<List<Transaction>> getTransactions() async {
     String? token = await _authService.getToken();
@@ -20,13 +19,16 @@ class TransactionService {
 
     if (response.statusCode == 200) {
       List jsonResponse = json.decode(response.body);
-      return jsonResponse.map((transaction) => Transaction.fromJson(transaction)).toList();
+      return jsonResponse
+          .map((transaction) => Transaction.fromJson(transaction))
+          .toList();
     } else {
       throw Exception('Failed to load transactions');
     }
   }
 
-  Future<Map<String, dynamic>?> createTransaction(Map<String, dynamic> transaction) async {
+  Future<Map<String, dynamic>?> createTransaction(
+      Map<String, dynamic> transaction) async {
     String? token = await _authService.getToken();
     final response = await http.post(
       Uri.parse('$baseUrl/transactions/'),
@@ -74,6 +76,23 @@ class TransactionService {
 
     if (response.statusCode != 204) {
       throw Exception('Failed to delete transaction');
+    }
+  }
+
+  Future<Map<String, dynamic>> getTotalIncomeExpenses() async {
+    String? token = await _authService.getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/transactions/totals/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load totals');
     }
   }
 }

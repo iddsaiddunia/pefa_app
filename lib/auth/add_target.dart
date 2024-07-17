@@ -105,7 +105,7 @@ class _TargetsPageState extends State<TargetsPage> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  deleteTarget() {
+  deleteTarget(int id) {
     showDialog(
         context: context,
         builder: (BuildContext contex) {
@@ -130,53 +130,21 @@ class _TargetsPageState extends State<TargetsPage> {
                   elevation: 0,
                   color: const Color.fromARGB(255, 66, 202, 137),
                   onPressed: () async {
-                    // setState(() {
-                    //   _isLoading = true;
-                    // });
-                    // if (_savingAmountController.text != "") {
-                    //   double amount =
-                    //       double.parse(_savingAmountController.text);
-                    //   final prefs = await SharedPreferences.getInstance();
-                    //   var userId = prefs.getInt('userId');
-
-                    //   Saving newSaving = Saving(
-                    //     id: 0,
-                    //     user: userId!,
-                    //     amount: amount,
-                    //     createdAt: DateTime.now(),
-                    //   );
-
-                    //   // Call the createSaving function
-                    //   try {
-                    //     Saving createdSaving =
-                    //         await SavingService.createSaving(newSaving);
-                    //     _savingAmountController.clear();
-                    //     setState(() {
-                    //       _isLoading = false;
-                    //     });
-                    //     ScaffoldMessenger.of(context).showSnackBar(
-                    //       const SnackBar(
-                    //           content: Text('Saving added successfully')),
-                    //     );
-                    //     // print(
-                    //     //     'Created Saving: ${createdSaving.id}, Amount: ${createdSaving.amount}');
-                    //   } catch (e) {
-                    //     setState(() {
-                    //       _isLoading = false;
-                    //     });
-                    //     ScaffoldMessenger.of(context).showSnackBar(
-                    //       const SnackBar(
-                    //           content: Text('Error while adding service')),
-                    //     );
-                    //     // print('Error creating saving: $e');
-                    //   }
-                    // } else {
-                    //   ScaffoldMessenger.of(context).showSnackBar(
-                    //     const SnackBar(
-                    //       content: Text('Fill amount'),
-                    //     ),
-                    //   );
-                    // }
+                    try {
+                      await _apiService.deleteTarget(id);
+                      setState(() {
+                        fetchTargets = ApiService.getTargets();
+                      });
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Target deleted successfully')),
+                      );
+                    } catch (e) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to delete target: $e')),
+                      );
+                    }
                   },
                   child: Text(
                     "Yes",
@@ -402,7 +370,8 @@ class _TargetsPageState extends State<TargetsPage> {
                                             snapshot.data![index].amountSaved,
                                         remainingDays: targetRemainingDays,
                                         ontapDelete: () {
-                                          deleteTarget();
+                                          deleteTarget(
+                                              snapshot.data![index].id);
                                         },
                                       );
                                     },
@@ -481,11 +450,20 @@ class MyTarget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Color? color;
+
+    if (progress == "failed") {
+      color = Colors.red;
+    } else if (progress == "onprogress") {
+      color = const Color.fromARGB(255, 201, 181, 3);
+    } else if (progress == "completed") {
+      color = Colors.green;
+    }
     return Container(
       margin: EdgeInsets.symmetric(vertical: 3.0),
       padding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 8),
       width: double.infinity,
-      height: 150,
+      height: 145,
       decoration: BoxDecoration(
         border: Border.all(
           width: 1,
@@ -516,7 +494,7 @@ class MyTarget extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 child: Text(
                   progress,
-                  style: TextStyle(fontSize: 12),
+                  style: TextStyle(fontSize: 12, color: color),
                 ),
               )
             ],
@@ -535,20 +513,35 @@ class MyTarget extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              MaterialButton(
-                minWidth: 120,
-                elevation: 0,
-                color: Colors.blue,
-                onPressed: () {},
-                child: Text(
-                  "Update",
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+              (progress == "onprogress")
+                  ? MaterialButton(
+                      minWidth: 120,
+                      elevation: 0,
+                      color: Colors.blue,
+                      onPressed: () {},
+                      child: Text(
+                        "Update",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    )
+                  : MaterialButton(
+                      minWidth: 120,
+                      elevation: 0,
+                      color: const Color.fromARGB(255, 223, 223, 223),
+                      onPressed: () {},
+                      child: Text(
+                        "Update",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
               MaterialButton(
                 minWidth: 120,
                 elevation: 0,

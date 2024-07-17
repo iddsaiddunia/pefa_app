@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:pfa_app/auth/base_layout.dart';
+import 'package:pfa_app/auth/home.dart';
 import 'package:pfa_app/color_themes.dart';
 import 'package:pfa_app/components.dart';
 import 'package:pfa_app/models/loan_model.dart';
@@ -72,11 +74,18 @@ class _LoansPageState extends State<LoansPage> {
 
       var response = await _loanService.createLoan(token!, loanData);
       if (response != null && !response.containsKey('error')) {
-        _showDialog('Target Added', 'Your target has been added successfully.');
+        _showDialog('Loan Added', 'Your loan has been added successfully.');
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BaseLayout(),
+          ),
+        );
       } else if (response != null && response.containsKey('error')) {
-        _showDialog('Failed to Add Target', response['error'].toString());
+        _showDialog('Failed to Add Loan', response['error'].toString());
       } else {
-        _showDialog('Failed to Add Target', 'An unexpected error occurred.');
+        _showDialog('Failed to Add Loan', 'An unexpected error occurred.');
       }
 
       setState(() {
@@ -103,6 +112,26 @@ class _LoansPageState extends State<LoansPage> {
       setState(() {
         selectedDate = picked;
       });
+  }
+
+  Future<void> _deleteLoan(int id, int index, List<Loan> loans) async {
+    try {
+      await _loanService.deleteLoan(id);
+      setState(() {
+        loans.removeAt(index);
+        fetchLoans = LoanService.getLoans();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Loan deleted')),
+      );
+    } catch (e) {
+      setState(() {
+        fetchLoans = LoanService.getLoans();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete loan: $e')),
+      );
+    }
   }
 
   @override
@@ -280,38 +309,68 @@ class _LoansPageState extends State<LoansPage> {
                             child: FutureBuilder<List<Loan>>(
                               future: fetchLoans,
                               builder: (context, snapshot) {
-                                if (snapshot.hasData) {
-                                  // print(snapshot.data!.length);
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                      child: CircularProgressIndicator());
+                                } else if (snapshot.hasError) {
+                                  return Center(
+                                      child: Text("${snapshot.error}"));
+                                } else if (!snapshot.hasData ||
+                                    snapshot.data!.isEmpty) {
+                                  return Center(
+                                      child: const Text('No loans available'));
+                                } else {
                                   return ListView.builder(
                                     itemCount: snapshot.data!.length,
-                                    itemBuilder: (contaxt, index) {
+                                    itemBuilder: (context, index) {
+                                      final loan = snapshot.data![index];
                                       double? interestAmount =
-                                          snapshot.data![index].interest! *
-                                              snapshot.data![index].amount;
+                                          loan.interest! * (loan.amount / 100);
 
-                                      // Calculate the difference in days
-                                      int remainingDays = snapshot
-                                          .data![index].loanDueDate
+                                      int remainingDays = loan.loanDueDate
                                           .difference(DateTime.now())
                                           .inDays;
-                                      return LoanCard(
-                                          loanType:
-                                              snapshot.data![index].loanType,
-                                          actorName:
-                                              snapshot.data![index].actorName,
-                                          amount: snapshot.data![index].amount,
-                                          amountPayed:
-                                              snapshot.data![index].amountPayed,
+
+                                      return Dismissible(
+                                        key: Key(loan.id.toString()),
+                                        direction: DismissDirection.endToStart,
+                                        onDismissed: (direction) {
+                                          print(loan.id);
+                                          _deleteLoan(
+                                              loan.id, index, snapshot.data!);
+
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                  'Loan ${loan.loanType} dismissed'),
+                                            ),
+                                          );
+                                        },
+                                        background: Container(
+                                          color: Colors.red,
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 20),
+                                          alignment:
+                                              AlignmentDirectional.centerEnd,
+                                          child: Icon(
+                                            Icons.delete,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        child: LoanCard(
+                                          loanType: loan.loanType,
+                                          actorName: loan.actorName,
+                                          amount: loan.amount,
+                                          amountPayed: loan.amountPayed,
                                           remainingDays: remainingDays,
-                                          interestAmount: interestAmount);
+                                          interestAmount: interestAmount,
+                                        ),
+                                      );
                                     },
                                   );
-                                } else if (snapshot.hasError) {
-                                  return Text("${snapshot.error}");
                                 }
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
                               },
                             ),
                           ),
@@ -378,9 +437,10 @@ class LoanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    double remainingAmount = (amount + interestAmount) - amountPayed;
     return Container(
       width: double.infinity,
-      height: 97,
+      height: 110,
       margin: const EdgeInsets.symmetric(vertical: 4.0),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -420,20 +480,24 @@ class LoanCard extends StatelessWidget {
                   Text(
                     actorName,
                     style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Colors.black54),
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
                   ),
                 ],
               ),
               Row(
                 children: [
                   const Text(
-                    "Amount-",
+                    "Remaining: ",
                     style: TextStyle(fontSize: 13),
                   ),
                   Text(
-                    amount.toString(),
+                    "${remainingAmount.toString()} Tsh",
                     style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Colors.black54),
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
                   ),
                 ],
               ),
@@ -445,30 +509,45 @@ class LoanCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Text(
-                    "Interest-",
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  Text(
-                    interestAmount.toString(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black54,
-                    ),
-                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Interest",
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        "${interestAmount.toString()} Tsh",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  )
                 ],
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    "Payed-",
-                    style: TextStyle(fontSize: 13),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Payed",
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        "${amountPayed.toString()} Tsh",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    amountPayed.toString(),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Colors.black54),
+                  SizedBox(
+                    width: 30,
                   ),
                   Container(
                     width: 70,
@@ -484,7 +563,10 @@ class LoanCard extends StatelessWidget {
                       children: [
                         const Text(
                           "remaining",
-                          style: TextStyle(fontSize: 9, color: Colors.white),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.white,
+                          ),
                         ),
                         Text(
                           "${remainingDays.toString()} days",

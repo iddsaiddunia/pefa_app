@@ -8,6 +8,7 @@ import 'nonAuth/register.dart';
 
 class Wrapper extends StatelessWidget {
   final bool isSignedIn;
+  
   const Wrapper({
     super.key,
     required this.isSignedIn,

@@ -12,13 +12,6 @@ class ApiService {
       'https://pefa-432220d0c209.herokuapp.com'; // Replace with your API URL
 
   static Future<List<Target>> getTargets() async {
-    UserProvider userProvider = UserProvider();
-    // int? userId = userProvider.userId;
-    int? userId;
-    final prefs = await SharedPreferences.getInstance();
-    userId = prefs.getInt('userId');
-
-    print("--------====>$userId");
 
     String? token = await _authService.getToken();
 
@@ -94,7 +87,7 @@ class ApiService {
     }
   }
 
-  static Future<void> deleteTarget(int id) async {
+  Future<void> deleteTarget(int id) async {
     String? token = await _authService.getToken();
     final response = await http.delete(
       Uri.parse('$baseUrl/targets/$id/'),
@@ -106,6 +99,45 @@ class ApiService {
 
     if (response.statusCode != 204) {
       throw Exception('Failed to delete target');
+    }
+  }
+
+  Future<void> updateTargetStatus(int id, String status) async {
+    String? token = await _authService.getToken();
+    final response = await http.patch(
+      Uri.parse('$baseUrl/targets/$id/'),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'target_status': status}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update target status');
+    }
+  }
+
+  Future<void> checkAndUpdateTargetsStatus() async {
+    try {
+      List<Target> targets = await getTargets();
+
+      for (var target in targets) {
+        String status = 'onprogress';
+        DateTime now = DateTime.now();
+
+        if (target.amountSaved >= target.targetedAmount && now.isBefore(target.targetDate)) {
+          status = 'completed';
+        } else if (now.isAfter(target.targetDate) && target.amountSaved < target.targetedAmount) {
+          status = 'failed';
+        }
+
+        if (target.targetStatus != status) {
+          await updateTargetStatus(target.id, status);
+        }
+      }
+    } catch (e) {
+      print('Error updating targets status: $e');
     }
   }
 }

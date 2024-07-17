@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:pfa_app/auth/add_loan.dart';
@@ -11,6 +12,7 @@ import 'package:pfa_app/models/loan_model.dart';
 import 'package:pfa_app/models/saving_model.dart';
 import 'package:pfa_app/models/transaction_model.dart';
 import 'package:pfa_app/services/api_services.dart';
+import 'package:pfa_app/services/auth_services.dart';
 import 'package:pfa_app/services/budget_service.dart';
 import 'package:pfa_app/services/loan_service.dart';
 import 'package:pfa_app/services/saving_services.dart';
@@ -23,6 +25,8 @@ import '../models/target_model.dart';
 
 TransactionService _transactionService = TransactionService();
 SavingService _savingService = SavingService();
+ApiService _apiService = ApiService();
+AuthService _authService = AuthService();
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -47,35 +51,55 @@ class _HomePageState extends State<HomePage> {
   String? _selectedOption = "other sources";
   int? userId;
   double _totalSavedAmount = 0.0;
+  double totalBalance = 0.0;
+  bool _isConnected = false;
 
   bool isInsightOpen = true;
   bool addTransaction = false;
   bool isTransLoading = false;
   bool _isLoading = false;
+  bool _loadSaving = false;
   bool isViewAll = false;
   List<Target> targetList = [];
+  List<Loan> loanList = [];
 
   Target? selectedTarget;
+  Loan? selectedLoan;
 
   late Future<List<Target>> fetchTargets;
   late Future<List<Loan>> fetchLoans;
   late Future<List<Saving>> fetchSavings;
   late Future<List<Transaction>> fetchTransactions;
   late Future<List<Budget>> futureBudgets;
+  late Future<Map<String, dynamic>> _totalsFuture;
 
   @override
   void initState() {
     super.initState();
+    checkConnectivity();
+    InternetConnectionChecker().onStatusChange.listen((status) {
+      setState(() {
+        _isConnected = status == InternetConnectionStatus.connected;
+      });
+    });
     _loadUserId();
     fetchTargets = ApiService.getTargets();
+    _apiService.checkAndUpdateTargetsStatus();
     fetchLoans = LoanService.getLoans();
     fetchSavings = SavingService.getSavings();
     fetchTransactions = _transactionService.getTransactions();
+    _totalsFuture = _transactionService.getTotalIncomeExpenses();
     futureBudgets = BudgetService.fetchBudgets();
     _loadTotalSavingAmount();
     fetchTargets.then((target) => {
           setState(() {
             targetList = target;
+          })
+        });
+
+    fetchLoans.then((loan) => {
+          setState(() {
+            loanList = loan;
           })
         });
   }
@@ -104,6 +128,36 @@ class _HomePageState extends State<HomePage> {
 
   List<String> tabsLength = ["All", "Income", "Expense"];
 
+  Future<void> checkConnectivity() async {
+    _isConnected = await InternetConnectionChecker().hasConnection;
+    setState(() {});
+    if (!_isConnected) {
+      _authService.logout(context);
+    }
+  }
+
+  Future<void> _refreshData() async {
+    await Future.wait([
+      ApiService.getTargets(),
+      LoanService.getLoans(),
+      SavingService.getSavings(),
+      _transactionService.getTransactions(),
+      _transactionService.getTotalIncomeExpenses(),
+      BudgetService.fetchBudgets(),
+      _loadTotalSavingAmount(), // Ensure this is a Future
+    ]);
+
+    setState(() {
+      // Re-fetch the data and set the new state
+      fetchTargets = ApiService.getTargets();
+      fetchLoans = LoanService.getLoans();
+      fetchSavings = SavingService.getSavings();
+      fetchTransactions = _transactionService.getTransactions();
+      _totalsFuture = _transactionService.getTotalIncomeExpenses();
+      futureBudgets = BudgetService.fetchBudgets();
+    });
+  }
+
   void changeTabs(int index) {
     setState(() {
       _selectedIndex = index;
@@ -128,20 +182,29 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  void _loadTotalSavingAmount() async {
+  Future<void> _loadTotalSavingAmount() async {
+    setState(() {
+      _isLoading = true;
+    });
     try {
       final prefs = await SharedPreferences.getInstance();
       var userId = prefs.getInt('userId');
       double totalAmount = await SavingService.getTotalAmountForUser(userId!);
       setState(() {
         _totalSavedAmount = totalAmount;
+        _isLoading = false;
       });
     } catch (e) {
-      // print('Error loading total amount: $e');
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
   addSavingsWindow() async {
+    setState(() {
+      _isLoading = true;
+    });
     showDialog(
         context: context,
         builder: (BuildContext contex) {
@@ -157,7 +220,7 @@ class _HomePageState extends State<HomePage> {
                 onPressed: () {
                   Navigator.pop(context);
                 },
-                child: Text(
+                child: const Text(
                   "Cancel",
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
@@ -174,6 +237,7 @@ class _HomePageState extends State<HomePage> {
                           double.parse(_savingAmountController.text);
                       final prefs = await SharedPreferences.getInstance();
                       var userId = prefs.getInt('userId');
+                      // print("$userId----->");
 
                       Saving newSaving = Saving(
                         id: 0,
@@ -184,12 +248,18 @@ class _HomePageState extends State<HomePage> {
 
                       // Call the createSaving function
                       try {
+                        Navigator.pop(context);
+                        loaderWindow();
                         Saving createdSaving =
                             await SavingService.createSaving(newSaving);
                         _savingAmountController.clear();
+
                         setState(() {
                           _isLoading = false;
                         });
+
+                        Navigator.pop(context);
+
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                               content: Text('Saving added successfully')),
@@ -201,10 +271,9 @@ class _HomePageState extends State<HomePage> {
                           _isLoading = false;
                         });
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Error while adding service')),
+                          SnackBar(content: Text('Failed adding service $e')),
                         );
-                        // print('Error creating saving: $e');
+                        print('Error creating saving: $e');
                       }
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -214,7 +283,7 @@ class _HomePageState extends State<HomePage> {
                       );
                     }
                   },
-                  child: Text(
+                  child: const Text(
                     "Add",
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                   )),
@@ -234,6 +303,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   addBudget() async {
+    setState(() {
+      _isLoading = true;
+    });
     List<Budget> existingBudgets = await BudgetService.fetchBudgets();
     Set<String> existingCategories =
         existingBudgets.map((b) => b.category).toSet();
@@ -262,8 +334,11 @@ class _HomePageState extends State<HomePage> {
                 color: Colors.redAccent,
                 onPressed: () {
                   Navigator.pop(context);
+                  setState(() {
+                    _isLoading = false;
+                  });
                 },
-                child: Text(
+                child: const Text(
                   "Cancel",
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
@@ -281,12 +356,18 @@ class _HomePageState extends State<HomePage> {
                         amount: amount!,
                         duration: duration!,
                         amountUsed: 0.0,
+                        createdAt: DateTime.now(),
                       );
+                      Navigator.pop(context);
+                      loaderWindow();
                       BudgetService.createBudget(newBudget).then((_) {
                         setState(() {
                           futureBudgets = BudgetService.fetchBudgets();
                         });
                         Navigator.of(context).pop();
+                        setState(() {
+                          _isLoading = false;
+                        });
                       });
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -294,9 +375,12 @@ class _HomePageState extends State<HomePage> {
                           content: Text('Fill all fields'),
                         ),
                       );
+                      setState(() {
+                        _isLoading = false;
+                      });
                     }
                   },
-                  child: Text(
+                  child: const Text(
                     "Add",
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                   )),
@@ -305,7 +389,7 @@ class _HomePageState extends State<HomePage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  decoration: InputDecoration(labelText: 'Category'),
+                  decoration: const InputDecoration(labelText: 'Category'),
                   items: availableCategories.map((String category) {
                     return DropdownMenuItem<String>(
                       value: category,
@@ -317,14 +401,14 @@ class _HomePageState extends State<HomePage> {
                   },
                 ),
                 TextField(
-                  decoration: InputDecoration(labelText: 'Amount'),
+                  decoration: const InputDecoration(labelText: 'Amount'),
                   keyboardType: TextInputType.number,
                   onChanged: (String value) {
                     amount = double.tryParse(value);
                   },
                 ),
                 TextField(
-                  decoration: InputDecoration(labelText: 'Duration'),
+                  decoration: const InputDecoration(labelText: 'Duration'),
                   keyboardType: TextInputType.number,
                   onChanged: (String value) {
                     duration = int.tryParse(value);
@@ -343,7 +427,7 @@ class _HomePageState extends State<HomePage> {
           return AlertDialog(
             title: Text(
               "$category",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             actions: [
               MaterialButton(
@@ -412,6 +496,22 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
+  loaderWindow() {
+    showDialog(
+        context: context,
+        builder: (BuildContext contex) {
+          return AlertDialog(
+              content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: CircularProgressIndicator(),
+              ),
+            ],
+          ));
+        });
+  }
+
   closeInsightBox() {
     setState(() {
       isInsightOpen = !isInsightOpen;
@@ -426,13 +526,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   showMoreTargetDetails(
-      int id,
-      String target_name,
-      String description,
-      String target_status,
-      DateTime target_date,
-      double targeted_amount,
-      double amount_saved) {
+    int id,
+    String target_name,
+    String description,
+    String target_status,
+    DateTime target_date,
+    double targeted_amount,
+    double amount_saved,
+    canItBeAccomplished,
+  ) {
     int differenceInDays = target_date.difference(DateTime.now()).inDays;
     showDialog(
       context: context,
@@ -440,12 +542,12 @@ class _HomePageState extends State<HomePage> {
         return AlertDialog(
           title: Text(
             target_name,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Divider(),
+              const Divider(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -459,72 +561,79 @@ class _HomePageState extends State<HomePage> {
                   )
                 ],
               ),
-              Divider(),
+              const Divider(),
               VerticalTextTIle(
                 title: "Remaining Days",
                 content: "${differenceInDays.toString()} days",
               ),
-              Divider(),
+              const Divider(),
               Text(
                 description,
-                style: TextStyle(fontSize: 12),
+                style: const TextStyle(fontSize: 12),
               ),
-              SizedBox(
+              const SizedBox(
                 height: 5,
               ),
-              InputBox(
-                  title: "new amount saved ($amount_saved)",
-                  controller: _targetSavedAmountController,
-                  isText: false),
+              // InputBox(
+              //     title: "new amount saved ($amount_saved)",
+              //     controller: _targetSavedAmountController,
+              //     isText: false),
+
+              Row(children: [
+                Icon(Icons.info),
+                (canItBeAccomplished)
+                    ? Text("Target can be accomplished")
+                    : Text("Hard to accomplish")
+              ]),
             ],
           ),
           actions: [
-            MaterialButton(
-              elevation: 0,
-              color: color.updateButtonColor,
-              onPressed: () async {
-                if (_targetSavedAmountController.text != "") {
-                  Target target = await ApiService.getTargetById(id);
+            // MaterialButton(
+            //   elevation: 0,
+            //   color: color.updateButtonColor,
+            //   onPressed: () async {
+            //     if (_targetSavedAmountController.text != "") {
+            //       Target target = await ApiService.getTargetById(id);
 
-                  // Update the amountSaved attribute
-                  double newAmountSaved =
-                      double.parse(_targetSavedAmountController.text);
-                  target.amountSaved = newAmountSaved;
+            //       // Update the amountSaved attribute
+            //       double newAmountSaved =
+            //           double.parse(_targetSavedAmountController.text);
+            //       target.amountSaved = newAmountSaved;
 
-                  print(target.targetDate);
+            //       // print(target.targetDate);
 
-                  // Call the updateTarget function
-                  // try {
-                  //   Target updatedTarget =
-                  //       await ApiService.updateTarget(id, target);
-                  //   print(
-                  //       'Updated Target: ${updatedTarget.id}, Amount Saved: ${updatedTarget.amountSaved}');
-                  // } catch (e) {
-                  //   print('Error updating target: $e');
-                  // }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Fill amount'),
-                    ),
-                  );
-                }
-              },
-              child: Text(
-                "Update",
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white),
-              ),
-            ),
+            //       // Call the updateTarget function
+            //       // try {
+            //       //   Target updatedTarget =
+            //       //       await ApiService.updateTarget(id, target);
+            //       //   print(
+            //       //       'Updated Target: ${updatedTarget.id}, Amount Saved: ${updatedTarget.amountSaved}');
+            //       // } catch (e) {
+            //       //   print('Error updating target: $e');
+            //       // }
+            //     } else {
+            //       ScaffoldMessenger.of(context).showSnackBar(
+            //         const SnackBar(
+            //           content: Text('Fill amount'),
+            //         ),
+            //       );
+            //     }
+            //   },
+            //   child: const Text(
+            //     "Update",
+            //     style: TextStyle(
+            //         fontSize: 12,
+            //         fontWeight: FontWeight.bold,
+            //         color: Colors.white),
+            //   ),
+            // ),
             MaterialButton(
               elevation: 0,
               color: color.cancelButtonColor,
               onPressed: () {
                 Navigator.pop(context);
               },
-              child: Text(
+              child: const Text(
                 "Cancel",
                 style: TextStyle(
                   fontSize: 12,
@@ -568,7 +677,15 @@ class _HomePageState extends State<HomePage> {
           "description": description,
         };
       } else if (category == "loan") {
-        return null;
+        transaction = {
+          "user": userId,
+          "amount": amount,
+          "transaction_type": transactionTypevalue,
+          "category": category,
+          "target": null,
+          "loan": selectedLoan!.id,
+          "description": description,
+        };
       } else {
         transaction = {
           "user": userId,
@@ -587,7 +704,10 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           isTransLoading = false;
         });
-        _showDialog('Transaction Added', 'Your transaction has been added successfully.');
+        _amountController.clear;
+        _refreshData();
+        _showDialog('Transaction Added',
+            'Your transaction has been added successfully.');
       } else if (response != null && response.containsKey('error')) {
         setState(() {
           isTransLoading = false;
@@ -597,7 +717,8 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           isTransLoading = false;
         });
-        _showDialog('Failed to Add Transaction', 'An unexpected error occurred.');
+        _showDialog(
+            'Failed to Add Transaction', 'An unexpected error occurred.');
       }
     } else {
       setState(() {
@@ -630,1184 +751,1546 @@ class _HomePageState extends State<HomePage> {
         // drawer:Drawer(),
         backgroundColor: const Color.fromARGB(50, 241, 241, 230),
 
-        body: Stack(
-          children: [
-            ListView(
-              children: [
-                (isInsightOpen)
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0, vertical: 5),
-                        child: Container(
-                          width: double.infinity,
-                          height: 150,
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          decoration: BoxDecoration(
-                            color: color.primaryColor,
-                            borderRadius: const BorderRadius.all(
-                              Radius.circular(10),
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 20.0, vertical: 5.0),
-                                    decoration: const BoxDecoration(
-                                      borderRadius: BorderRadius.all(
-                                        Radius.circular(15.0),
-                                      ),
-                                      color: Colors.white,
-                                    ),
-                                    child: const Center(
-                                      child: Text(
-                                        "Insights",
-                                        style: TextStyle(
-                                            color: Colors.black,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600),
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: () {
-                                      closeInsightBox();
-                                    },
-                                    icon: const Icon(
-                                      Icons.cancel,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
+        body: RefreshIndicator(
+          onRefresh: _refreshData,
+          child: Stack(
+            children: [
+              ListView(
+                children: [
+                  (isInsightOpen)
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8.0, vertical: 5),
+                          child: Container(
+                            width: double.infinity,
+                            height: 170,
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 8.0),
+                            decoration: BoxDecoration(
+                              color: color.primaryColor,
+                              borderRadius: const BorderRadius.all(
+                                Radius.circular(10),
                               ),
-                              Expanded(
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 6.0),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                        border: Border.all(
-                                            width: 1, color: Colors.white),
-                                        borderRadius: const BorderRadius.all(
-                                            Radius.circular(10))),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : Container(),
-                const SizedBox(
-                  height: 15,
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: SizedBox(
-                    height: 180,
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              "My Targets",
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w600),
                             ),
-                            CustomeIconButton(
-                                title: "Add Target",
-                                ontap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const TargetsPage(),
-                                    ),
-                                  );
-                                },
-                                icon: Icons.add)
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Expanded(
-                          child: FutureBuilder<List<Target>>(
-                            future: fetchTargets,
-                            builder: (context, snapshot) {
-                              if (snapshot.hasData) {
-                                return ListView.builder(
-                                  itemCount: snapshot.data!.length,
-                                  scrollDirection: Axis.horizontal,
-                                  itemBuilder: (contaxt, index) {
-                                    double percentage = (snapshot
-                                            .data![index].amountSaved /
-                                        snapshot.data![index].targetedAmount);
-                                    DateTime currentTimestamp =
-                                        DateTime.now(); // Example timestamp 1
-                                    DateTime targetTime = snapshot.data![index]
-                                        .targetDate; // Example timestamp 2
-
-                                    // Calculate the difference in days
-                                    int targetRemainingDays = targetTime
-                                        .difference(currentTimestamp)
-                                        .inDays;
-
-                                    return TargetCard(
-                                      targetName:
-                                          snapshot.data![index].targetName,
-                                      targetAmount:
-                                          snapshot.data![index].targetedAmount,
-                                      percent: percentage,
-                                      timeRemained:
-                                          targetRemainingDays.toString(),
-                                      ontap: () {
-                                        showMoreTargetDetails(
-                                            snapshot.data![index].id,
-                                            snapshot.data![index].targetName,
-                                            snapshot.data![index].description,
-                                            snapshot.data![index].targetStatus,
-                                            snapshot.data![index].targetDate,
-                                            snapshot
-                                                .data![index].targetedAmount,
-                                            snapshot.data![index].amountSaved);
-                                      },
-                                    );
-                                  },
-                                );
-                              } else if (!snapshot.hasData) {
-                                return Center(
-                                  child:
-                                      Text("Start setting your goals today!"),
-                                );
-                              } else if (snapshot.hasError) {
-                                return Text("${snapshot.error}");
-                              }
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            },
-                          ),
-                        )
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(
-                    // height: 10.0,
-                    ),
-                Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: Container(
-                    width: double.infinity,
-                    height: 350,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: const BorderRadius.all(
-                        Radius.circular(12),
-                      ),
-                      border: Border.all(width: 1, color: Colors.black12),
-                    ),
-                    child: Column(
-                      children: [
-                        Container(
-                          height: 95,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          decoration: BoxDecoration(
-                              color: Colors.blue,
-                              border: Border.all(width: 1, color: Colors.blue),
-                              borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(8))),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                height: 48,
-                                child: Row(
+                            child: Column(
+                              children: [
+                                Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      "Savings",
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white),
-                                    ),
-                                    GestureDetector(
-                                      onTap: () {
-                                        addSavingsWindow();
-                                      },
-                                      child: Icon(
-                                        Icons.add,
-                                        size: 30,
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 20.0, vertical: 5.0),
+                                      decoration: const BoxDecoration(
+                                        borderRadius: BorderRadius.all(
+                                          Radius.circular(15.0),
+                                        ),
                                         color: Colors.white,
                                       ),
-                                    )
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                width: double.infinity,
-                                height: 43,
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  border:
-                                      Border.all(width: 1, color: Colors.white),
-                                  borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(8),
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    _totalSavedAmount.toString(),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              )
-                            ],
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 5,
-                        ),
-                        Column(
-                          children: [
-                            Container(
-                              width: double.infinity,
-                              height: 40,
-                              child: Text(
-                                "My Budgets",
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            Container(
-                              width: double.infinity,
-                              height: 120,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: const BorderRadius.vertical(
-                                  bottom: Radius.circular(10),
-                                ),
-                                border:
-                                    Border.all(width: 1, color: Colors.black12),
-                              ),
-                              child: FutureBuilder<List<Budget>>(
-                                future: futureBudgets,
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return Center(
-                                        child: CircularProgressIndicator(
-                                      color: Colors.blue,
-                                    ));
-                                  } else if (snapshot.hasError) {
-                                    return Text('Error: ${snapshot.error}');
-                                  } else if (!snapshot.hasData ||
-                                      snapshot.data!.isEmpty) {
-                                    return Text(
-                                        'No budgets available, start now ):');
-                                  } else {
-                                    List<Budget> budgets = snapshot.data!;
-                                    return ListView.builder(
-                                      scrollDirection: Axis.horizontal,
-                                      itemCount: budgets.length,
-                                      itemBuilder: (context, index) {
-                                        Budget budget = budgets[index];
-                                        String formatedAmount =
-                                            formatAmount(budget.amount);
-                                        double percentage = (budget.amountUsed /
-                                                budget.amount) *
-                                            100;
-
-                                        return BudgetCard(
-                                          category: budget.category,
-                                          days: budget.duration,
-                                          price: formatedAmount,
-                                          percentage: percentage,
-                                          ontap: () {
-                                            viewBudget(budget.category);
-                                          },
-                                        );
-                                      },
-                                    );
-                                  }
-                                },
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () {
-                                addBudget();
-                              },
-                              child: Container(
-                                width: double.infinity,
-                                height: 50.0,
-                                margin:
-                                    const EdgeInsets.symmetric(vertical: 5.0),
-                                decoration: BoxDecoration(
-                                  // color: Colors.blue,
-                                  border: Border.all(
-                                      width: 2, color: color.primaryColor),
-                                  borderRadius: const BorderRadius.all(
-                                    Radius.circular(8),
-                                  ),
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    "Add Budget",
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  // height: 400,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              "My Loans",
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) =>
-                                            const LoansPage()));
-                              },
-                              child: const Row(
-                                children: [
-                                  Text("View all"),
-                                  Padding(
-                                    padding:
-                                        EdgeInsets.symmetric(horizontal: 5.0),
-                                    child: Icon(
-                                      Icons.arrow_forward_ios,
-                                      size: 15,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          ],
-                        ),
-                        const Divider(),
-                        Container(
-                          width: double.infinity,
-                          // height: 40,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Tabs(
-                                    title: "Credited",
-                                    selectedIndex: _selectedLoanType,
-                                    index: 0,
-                                    isPressed: () {
-                                      setState(
-                                        () {
-                                          changeLoanType(0);
-                                          _loanTypeController.animateToPage(0,
-                                              duration: const Duration(
-                                                  milliseconds: 500),
-                                              curve: Curves.ease);
-                                        },
-                                      );
-                                    },
-                                  ),
-                                  Tabs(
-                                    title: "Debited",
-                                    selectedIndex: _selectedLoanType,
-                                    index: 1,
-                                    isPressed: () {
-                                      setState(
-                                        () {
-                                          changeLoanType(1);
-
-                                          _loanTypeController.animateToPage(
-                                            1,
-                                            duration: const Duration(
-                                              milliseconds: 500,
-                                            ),
-                                            curve: Curves.ease,
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const LoansPage(),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  // width: 90,
-                                  // height: 40,
-                                  decoration: BoxDecoration(
-                                    color: Colors.black12,
-                                    border: Border.all(
-                                        width: 1, color: Colors.black26),
-                                    borderRadius: const BorderRadius.all(
-                                      Radius.circular(5),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    children: [
-                                      Icon(Icons.add),
-                                      Text(
-                                        "Add loan",
-                                        style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            ],
-                          ),
-                        ),
-                        SizedBox(
-                          height: 400,
-                          child: FutureBuilder<List<Loan>>(
-                            future: fetchLoans,
-                            builder: (context, snapshot) {
-                              if (snapshot.hasData) {
-                                return PageView(
-                                  controller: _loanTypeController,
-                                  children: [
-                                    Container(
-                                      child: ListView.builder(
-                                        itemCount: snapshot.data!.length,
-                                        itemBuilder: (context, index) {
-                                          double? interestAmount =
-                                              snapshot.data![index].interest! *
-                                                  snapshot.data![index].amount;
-
-                                          // Calculate the difference in days
-                                          int remainingDays = snapshot
-                                              .data![index].loanDueDate
-                                              .difference(DateTime.now())
-                                              .inDays;
-                                          if (snapshot.data![index].loanType ==
-                                              "own") {
-                                            if (index < 10) {
-                                              return LoanCard(
-                                                  loanType: snapshot
-                                                      .data![index].loanType,
-                                                  actorName: snapshot
-                                                      .data![index].actorName,
-                                                  amount: snapshot
-                                                      .data![index].amount,
-                                                  amountPayed: snapshot
-                                                      .data![index].amountPayed,
-                                                  remainingDays: remainingDays,
-                                                  interestAmount:
-                                                      interestAmount);
-                                            } else {
-                                              return Center();
-                                            }
-                                          }
-                                          return Center();
-                                        },
-                                      ),
-                                    ),
-                                    Container(
-                                      child: ListView.builder(
-                                        itemCount: snapshot.data!.length,
-                                        itemBuilder: (context, index) {
-                                          double? interestAmount =
-                                              (snapshot.data![index].interest! /
-                                                      100) *
-                                                  snapshot.data![index].amount;
-
-                                          // Calculate the difference in days
-                                          int remainingDays = snapshot
-                                              .data![index].loanDueDate
-                                              .difference(DateTime.now())
-                                              .inDays;
-                                          if (snapshot.data![index].loanType ==
-                                              "owned") {
-                                            if (index < 5) {
-                                              return LoanCard(
-                                                  loanType: snapshot
-                                                      .data![index].loanType,
-                                                  actorName: snapshot
-                                                      .data![index].actorName,
-                                                  amount: snapshot
-                                                      .data![index].amount,
-                                                  amountPayed: snapshot
-                                                      .data![index].amountPayed,
-                                                  remainingDays: remainingDays,
-                                                  interestAmount:
-                                                      interestAmount);
-                                            } else {
-                                              return Center();
-                                            }
-                                          }
-                                          return Center();
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              } else if (snapshot.hasError) {
-                                return Text("${snapshot.error}");
-                              } else if (!snapshot.hasData) {
-                                return Center(
-                                  child: Text(
-                                      "you have no loan added, you can add your loans any time ):"),
-                                );
-                              }
-                              return const Center(
-                                  child: CircularProgressIndicator());
-                            },
-                          ),
-                        )
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Positioned(
-                bottom: 80,
-                right: 10,
-                child: FloatingActionButton(
-                  onPressed: () {
-                    toggleTransactionCard();
-                  },
-                  child: Icon((addTransaction) ? Icons.close : Icons.add),
-                )),
-            (addTransaction == true)
-                ? DraggableScrollableSheet(
-                    initialChildSize:
-                        0.7, // Initial size of the sheet (30% of the screen)
-                    minChildSize:
-                        0.1, // Minimum size of the sheet (10% of the screen)
-                    maxChildSize:
-                        0.8, // Maximum size of the sheet (80% of the screen)
-                    builder: (BuildContext context,
-                        ScrollController scrollController) {
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(15),
-                          ),
-                        ),
-                        child: ListView(
-                          controller: scrollController,
-                          children: [
-                            Align(
-                              child: Container(
-                                width: 100,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  color: Colors.black12,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(
-                              height: 10,
-                            ),
-                            Column(
-                              children: [
-                                Container(
-                                  width: double.infinity,
-                                  height: 50,
-                                  // color: Colors.red,
-                                  child: const TabBar(
-                                    padding: EdgeInsets.all(0),
-                                    labelColor: Colors.black,
-                                    indicatorColor: Colors.black,
-                                    labelPadding: EdgeInsets.all(0),
-                                    unselectedLabelStyle: TextStyle(
-                                      fontSize: 14,
-                                      // fontWeight: FontWeight.w400,
-                                      color: Colors.black54,
-                                    ),
-                                    labelStyle: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700),
-                                    tabs: [
-                                      Tab(
-                                        text: "New Transaction",
-                                      ),
-                                      Tab(text: "History"),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  width: double.infinity,
-                                  height:
-                                      MediaQuery.of(context).size.height / 2.2,
-                                  // color: Colors.red,
-                                  child: TabBarView(
-                                    children: [
-                                      Container(
-                                        child: ListView(
-                                          children: [
-                                            Container(
-                                              width: double.infinity,
-                                              height: 50,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 7),
-                                              margin:
-                                                  const EdgeInsets.symmetric(
-                                                      vertical: 5),
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                    width: 1,
-                                                    color: Colors.black26),
-                                                borderRadius:
-                                                    const BorderRadius.all(
-                                                  Radius.circular(10),
-                                                ),
-                                              ),
-                                              child: DropdownButton(
-                                                isExpanded: true,
-                                                elevation: 0,
-                                                // Initial Value
-                                                value: transactionTypevalue,
-                                                // Down Arrow Icon
-                                                icon: const Icon(
-                                                    Icons.keyboard_arrow_down),
-
-                                                // Array list of items
-                                                items: transactionType
-                                                    .map((String items) {
-                                                  return DropdownMenuItem(
-                                                    value: items,
-                                                    child: Text(items),
-                                                  );
-                                                }).toList(),
-                                                // After selecting the desired option,it will
-                                                // change button value to selected value
-                                                onChanged: (String? newValue) {
-                                                  setState(() {
-                                                    transactionTypevalue =
-                                                        newValue!;
-                                                  });
-                                                },
-                                              ),
-                                            ),
-                                            (transactionTypevalue == "expense")
-                                                ? Container(
-                                                    width: double.infinity,
-                                                    height: 50,
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 10,
-                                                        vertical: 7),
-                                                    margin: const EdgeInsets
-                                                        .symmetric(vertical: 5),
-                                                    decoration: BoxDecoration(
-                                                      border: Border.all(
-                                                          width: 1,
-                                                          color:
-                                                              Colors.black26),
-                                                      borderRadius:
-                                                          const BorderRadius
-                                                              .all(
-                                                        Radius.circular(10),
-                                                      ),
-                                                    ),
-                                                    child: DropdownButton(
-                                                      isExpanded: true,
-                                                      elevation: 0,
-                                                      // Initial Value
-                                                      value:
-                                                          purposedropdownvalue,
-                                                      // Down Arrow Icon
-                                                      icon: const Icon(Icons
-                                                          .keyboard_arrow_down),
-
-                                                      // Array list of items
-                                                      items: purposeItems
-                                                          .map((String items) {
-                                                        return DropdownMenuItem(
-                                                          value: items,
-                                                          child: Text(items),
-                                                        );
-                                                      }).toList(),
-                                                      // After selecting the desired option,it will
-                                                      // change button value to selected value
-                                                      onChanged:
-                                                          (String? newValue) {
-                                                        setState(() {
-                                                          purposedropdownvalue =
-                                                              newValue!;
-                                                        });
-                                                      },
-                                                    ),
-                                                  )
-                                                : Container(),
-                                            (transactionTypevalue == "income")
-                                                ? Row(
-                                                    children: [
-                                                      Row(
-                                                        children: [
-                                                          Radio<String>(
-                                                            value: 'salary',
-                                                            groupValue:
-                                                                _selectedOption,
-                                                            onChanged: (String?
-                                                                value) {
-                                                              setState(() {
-                                                                _selectedOption =
-                                                                    value;
-                                                              });
-                                                            },
-                                                          ),
-                                                          Text(
-                                                            "salary",
-                                                            style: TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      Row(
-                                                        children: [
-                                                          Radio<String>(
-                                                            value: 'other',
-                                                            groupValue:
-                                                                _selectedOption,
-                                                            onChanged: (String?
-                                                                value) {
-                                                              setState(() {
-                                                                _selectedOption =
-                                                                    value;
-                                                              });
-                                                            },
-                                                          ),
-                                                          Text(
-                                                            "other sources",
-                                                            style: TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ],
-                                                  )
-                                                : Container(),
-                                            (purposedropdownvalue == "target")
-                                                ? Container(
-                                                    width: double.infinity,
-                                                    height: 50,
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 10,
-                                                        vertical: 7),
-                                                    margin: const EdgeInsets
-                                                        .symmetric(vertical: 5),
-                                                    decoration: BoxDecoration(
-                                                      border: Border.all(
-                                                          width: 1,
-                                                          color:
-                                                              Colors.black26),
-                                                      borderRadius:
-                                                          const BorderRadius
-                                                              .all(
-                                                        Radius.circular(10),
-                                                      ),
-                                                    ),
-                                                    child: targetList.isEmpty
-                                                        ? Center(
-                                                            child:
-                                                                CircularProgressIndicator(),
-                                                          )
-                                                        : DropdownButton<
-                                                            Target>(
-                                                            value:
-                                                                selectedTarget,
-                                                            hint: Text(
-                                                                'Select a Target'),
-                                                            onChanged: (Target?
-                                                                newValue) {
-                                                              setState(() {
-                                                                selectedTarget =
-                                                                    newValue!;
-                                                              });
-                                                            },
-                                                            items: targetList
-                                                                .map((Target
-                                                                    target) {
-                                                              return DropdownMenuItem<
-                                                                  Target>(
-                                                                value: target,
-                                                                child: Text(target
-                                                                    .targetName),
-                                                              );
-                                                            }).toList(),
-                                                          ),
-                                                  )
-                                                : Container(),
-                                            InputBox(
-                                              isText: false,
-                                              title: "Amount",
-                                              controller: _amountController,
-                                            ),
-                                            Container(
-                                              width: double.infinity,
-                                              height: 50,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 7),
-                                              margin:
-                                                  const EdgeInsets.symmetric(
-                                                      vertical: 5),
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                    width: 1,
-                                                    color: Colors.black26),
-                                                borderRadius:
-                                                    const BorderRadius.all(
-                                                  Radius.circular(10),
-                                                ),
-                                              ),
-                                              child: DropdownButton(
-                                                isExpanded: true,
-                                                elevation: 0,
-                                                // Initial Value
-                                                value: dropdownvalue,
-                                                // Down Arrow Icon
-                                                icon: const Icon(
-                                                  Icons.keyboard_arrow_down,
-                                                ),
-
-                                                // Array list of items
-                                                items:
-                                                    items.map((String items) {
-                                                  return DropdownMenuItem(
-                                                    value: items,
-                                                    child: Text(items),
-                                                  );
-                                                }).toList(),
-                                                // After selecting the desired option,it will
-                                                // change button value to selected value
-                                                onChanged: (String? newValue) {
-                                                  setState(() {
-                                                    dropdownvalue = newValue!;
-                                                  });
-                                                },
-                                              ),
-                                            ),
-                                            InputBox(
-                                              isText: true,
-                                              title: "Description",
-                                              controller:
-                                                  _descriptionController,
-                                            ),
-                                            const SizedBox(
-                                              height: 12,
-                                            ),
-                                            MaterialButton(
-                                              minWidth: double.infinity,
-                                              height: 50,
-                                              color: color.buttonColor,
-                                              onPressed: () {
-                                                addTransactionFn();
-                                              },
-                                              child: (!isTransLoading)
-                                                  ? const Text(
-                                                      "Add Transaction",
-                                                      style: TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.w600),
-                                                    )
-                                                  : const CircularProgressIndicator(
-                                                      color: Colors.white),
-                                            )
-                                          ],
+                                      child: const Center(
+                                        child: Text(
+                                          "Insights",
+                                          style: TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600),
                                         ),
                                       ),
-                                      Container(
-                                        child: Column(
-                                          children: [
-                                            const SizedBox(
-                                              height: 10,
-                                            ),
-                                            Container(
-                                              width: double.infinity,
-                                              height: 60,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      vertical: 3.0),
-// color: Colors.black12,
-                                              child: ListView.builder(
-                                                itemCount: tabsLength.length,
-                                                scrollDirection:
-                                                    Axis.horizontal,
-                                                itemBuilder: (context, index) {
-                                                  return Tabs(
-                                                    title: tabsLength[index],
-                                                    index: index,
-                                                    selectedIndex:
-                                                        _selectedIndex,
-                                                    isPressed: () {
-                                                      changeTabs(index);
-// print(index);
-                                                      _pageController.animateToPage(
-                                                          index,
-                                                          duration:
-                                                              const Duration(
-                                                                  milliseconds:
-                                                                      500),
-                                                          curve: Curves.ease);
-                                                    },
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: PageView(
-                                                controller: _pageController,
-                                                onPageChanged: (int page) {
-                                                  setState(() {
-                                                    _selectedIndex = page;
-                                                    print(_selectedIndex);
-                                                  });
-                                                },
-                                                children: <Widget>[
-                                                  CustomPage(
-                                                    content: FutureBuilder<
-                                                        List<Transaction>>(
-                                                      future: fetchTransactions,
-                                                      builder:
-                                                          (context, snapshot) {
-                                                        if (snapshot.hasData) {
-                                                          // print(snapshot.data!.length);
-                                                          return ListView
-                                                              .builder(
-                                                            itemCount: snapshot
-                                                                .data!.length,
-                                                            itemBuilder:
-                                                                (contaxt,
-                                                                    index) {
-                                                              String
-                                                                  formattedDate =
-                                                                  formatDateTime(
-                                                                      snapshot
-                                                                          .data![
-                                                                              index]
-                                                                          .date);
-                                                              return HistoryCard(
-                                                                isPressed:
-                                                                    () {},
-                                                                category: snapshot
-                                                                    .data![
-                                                                        index]
-                                                                    .category,
-                                                                type: snapshot
-                                                                    .data![
-                                                                        index]
-                                                                    .transactionType,
-                                                                description: snapshot
-                                                                    .data![
-                                                                        index]
-                                                                    .description,
-                                                                price: snapshot
-                                                                    .data![
-                                                                        index]
-                                                                    .amount,
-                                                                createdAt:
-                                                                    formattedDate,
-                                                              );
-                                                            },
-                                                          );
-                                                        } else if (snapshot
-                                                            .hasError) {
-                                                          return Text(
-                                                              "${snapshot.error}");
-                                                        }
-                                                        return const Center(
-                                                          child:
-                                                              CircularProgressIndicator(),
-                                                        );
-                                                      },
+                                    ),
+                                    IconButton(
+                                      onPressed: () {
+                                        closeInsightBox();
+                                      },
+                                      icon: const Icon(
+                                        Icons.cancel,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7.0, vertical: 5.0),
+                                  // height: 150,
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                        width: 1, color: Colors.white),
+                                    borderRadius: const BorderRadius.all(
+                                      Radius.circular(10),
+                                    ),
+                                  ),
+                                  child: FutureBuilder<Map<String, dynamic>>(
+                                    future: _totalsFuture,
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState ==
+                                          ConnectionState.waiting) {
+                                        return Center(
+                                          child: CircularProgressIndicator(
+                                              color: Colors.white),
+                                        );
+                                      } else if (snapshot.hasError) {
+                                        return Center(
+                                            child: Text('${snapshot.error}'));
+                                      } else if (!snapshot.hasData ||
+                                          snapshot.data == null) {
+                                        return Center(
+                                          child: Text('No data available'),
+                                        );
+                                      }
+
+                                      final totals = snapshot.data!;
+
+                                      // print("---->>>>>>$totals");
+                                      totalBalance = totals['remaining_balance']
+                                          .toDouble();
+
+                                      String income = formatAmount(
+                                          totals['total_income'].toDouble());
+                                      String expenses = formatAmount(
+                                          totals['total_expenses'].toDouble());
+                                      String balance = formatAmount(
+                                          totals['remaining_balance']
+                                              .toDouble());
+
+                                      return Column(
+                                        // mainAxisAlignment:
+                                        //     MainAxisAlignment.spaceEvenly,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Column(
+                                                children: [
+                                                  const Text(
+                                                    "Income",
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.white,
                                                     ),
                                                   ),
-                                                  CustomPage(
-                                                    content: FutureBuilder<
-                                                        List<Transaction>>(
-                                                      future: fetchTransactions,
-                                                      builder:
-                                                          (context, snapshot) {
-                                                        if (snapshot.hasData) {
-                                                          // print(snapshot.data!.length);
-                                                          return ListView
-                                                              .builder(
-                                                                  itemCount:
-                                                                      snapshot
-                                                                          .data!
-                                                                          .length,
-                                                                  itemBuilder:
-                                                                      (contaxt,
-                                                                          index) {
-                                                                    if (snapshot
-                                                                            .data![index]
-                                                                            .transactionType ==
-                                                                        "income") {
-                                                                      String
-                                                                          formattedDate =
-                                                                          formatDateTime(snapshot
-                                                                              .data![index]
-                                                                              .date);
-                                                                      return HistoryCard(
-                                                                        isPressed:
-                                                                            () {},
-                                                                        category: snapshot
-                                                                            .data![index]
-                                                                            .category,
-                                                                        type: snapshot
-                                                                            .data![index]
-                                                                            .transactionType,
-                                                                        description: snapshot
-                                                                            .data![index]
-                                                                            .description,
-                                                                        price: snapshot
-                                                                            .data![index]
-                                                                            .amount,
-                                                                        createdAt:
-                                                                            formattedDate,
-                                                                      );
-                                                                    } else {
-                                                                      return Container();
-                                                                    }
-                                                                  });
-                                                        } else if (snapshot
-                                                            .hasError) {
-                                                          return Text(
-                                                              "${snapshot.error}");
-                                                        }
-                                                        return const Center(
-                                                          child:
-                                                              CircularProgressIndicator(),
-                                                        );
-                                                      },
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            5.0),
+                                                    width: 150,
+                                                    height: 35,
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                      color: Colors.white,
+                                                      borderRadius:
+                                                          BorderRadius.all(
+                                                        Radius.circular(5),
+                                                      ),
                                                     ),
-                                                  ),
-                                                  CustomPage(
-                                                    content: FutureBuilder<
-                                                        List<Transaction>>(
-                                                      future: fetchTransactions,
-                                                      builder:
-                                                          (context, snapshot) {
-                                                        if (snapshot.hasData) {
-                                                          // print(snapshot.data!.length);
-                                                          return ListView
-                                                              .builder(
-                                                                  itemCount:
-                                                                      snapshot
-                                                                          .data!
-                                                                          .length,
-                                                                  itemBuilder:
-                                                                      (contaxt,
-                                                                          index) {
-                                                                    if (snapshot
-                                                                            .data![index]
-                                                                            .transactionType ==
-                                                                        "expense") {
-                                                                      String
-                                                                          formattedDate =
-                                                                          formatDateTime(snapshot
-                                                                              .data![index]
-                                                                              .date);
-                                                                      return HistoryCard(
-                                                                        isPressed:
-                                                                            () {},
-                                                                        category: snapshot
-                                                                            .data![index]
-                                                                            .category,
-                                                                        type: snapshot
-                                                                            .data![index]
-                                                                            .transactionType,
-                                                                        description: snapshot
-                                                                            .data![index]
-                                                                            .description,
-                                                                        price: snapshot
-                                                                            .data![index]
-                                                                            .amount,
-                                                                        createdAt:
-                                                                            formattedDate,
-                                                                      );
-                                                                    } else {
-                                                                      return Container();
-                                                                    }
-                                                                  });
-                                                        } else if (snapshot
-                                                            .hasError) {
-                                                          return Text(
-                                                              "${snapshot.error}");
-                                                        }
-                                                        return const Center(
-                                                          child:
-                                                              CircularProgressIndicator(),
-                                                        );
-                                                      },
+                                                    child: Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .spaceAround,
+                                                      children: [
+                                                        Row(
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .arrow_downward,
+                                                              size: 18,
+                                                              color:
+                                                                  Colors.green,
+                                                            ),
+                                                            Icon(
+                                                              Icons
+                                                                  .arrow_downward,
+                                                              size: 18,
+                                                              color:
+                                                                  Colors.green,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        Text(
+                                                          '$income Tsh',
+                                                          style: TextStyle(
+                                                            fontSize: 13,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color:
+                                                                Color.fromARGB(
+                                                                    255,
+                                                                    102,
+                                                                    102,
+                                                                    102),
+                                                          ),
+                                                        )
+                                                      ],
                                                     ),
                                                   ),
                                                 ],
                                               ),
-                                            ),
-                                          ],
+                                              Column(
+                                                children: [
+                                                  const Text(
+                                                    "Expensies",
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            5.0),
+                                                    width: 150,
+                                                    height: 35,
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                      color: Colors.white,
+                                                      borderRadius:
+                                                          BorderRadius.all(
+                                                        Radius.circular(5),
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .spaceAround,
+                                                      children: [
+                                                        Row(
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .arrow_upward,
+                                                              size: 18,
+                                                              color: Colors.red,
+                                                            ),
+                                                            Icon(
+                                                              Icons
+                                                                  .arrow_upward,
+                                                              size: 18,
+                                                              color: Colors.red,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        Text(
+                                                          "$expenses Tsh",
+                                                          style: TextStyle(
+                                                            fontSize: 13,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color:
+                                                                Color.fromARGB(
+                                                                    255,
+                                                                    102,
+                                                                    102,
+                                                                    102),
+                                                          ),
+                                                        )
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                          const Divider(),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                "Total Balance",
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Color.fromARGB(
+                                                      255, 235, 211, 211),
+                                                ),
+                                              ),
+                                              SizedBox(width: 30),
+                                              Text(
+                                                "$balance Tsh",
+                                                style: TextStyle(
+                                                  fontSize: 15,
+                                                  color: Color.fromARGB(
+                                                      255, 250, 250, 250),
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : Container(),
+                  const SizedBox(
+                    height: 15,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: SizedBox(
+                      height: 180,
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                "My Targets",
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
+                              CustomeIconButton(
+                                  title: "Add Target",
+                                  ontap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const TargetsPage(),
+                                      ),
+                                    );
+                                  },
+                                  icon: Icons.add)
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: FutureBuilder<List<Target>>(
+                              future: fetchTargets,
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                      child: CircularProgressIndicator(
+                                    color: Colors.blue,
+                                  ));
+                                } else if (snapshot.hasError) {
+                                  return Text('Error: ${snapshot.error}');
+                                } else if (!snapshot.hasData ||
+                                    snapshot.data!.isEmpty) {
+                                  return Center(
+                                    child: const Text(
+                                        'No targets available, start now ):'),
+                                  );
+                                } else {
+                                  // List<Target> targets = snapshot.data!;
+                                  return ListView.builder(
+                                    itemCount: snapshot.data!.length,
+                                    scrollDirection: Axis.horizontal,
+                                    itemBuilder: (contaxt, index) {
+                                      double remainingAmount =
+                                          snapshot.data![index].targetedAmount -
+                                              snapshot.data![index].amountSaved;
+                                      bool canItBeAccomplished = false;
+                                      if (totalBalance >= remainingAmount) {
+                                        canItBeAccomplished = true;
+                                      } else {
+                                        canItBeAccomplished = false;
+                                      }
+
+                                      double percentage = (snapshot
+                                              .data![index].amountSaved /
+                                          snapshot.data![index].targetedAmount);
+                                      DateTime currentTimestamp =
+                                          DateTime.now(); // Example timestamp 1
+                                      DateTime targetTime = snapshot
+                                          .data![index]
+                                          .targetDate; // Example timestamp 2
+
+                                      // Calculate the difference in days
+                                      int targetRemainingDays = targetTime
+                                          .difference(currentTimestamp)
+                                          .inDays;
+
+                                      return (snapshot
+                                                  .data![index].targetStatus ==
+                                              "onprogress")
+                                          ? TargetCard(
+                                              targetName: snapshot
+                                                  .data![index].targetName,
+                                              targetAmount: snapshot
+                                                  .data![index].targetedAmount,
+                                              percent: percentage,
+                                              timeRemained: targetRemainingDays
+                                                  .toString(),
+                                              ontap: () {
+                                                showMoreTargetDetails(
+                                                    snapshot.data![index].id,
+                                                    snapshot.data![index]
+                                                        .targetName,
+                                                    snapshot.data![index]
+                                                        .description,
+                                                    snapshot.data![index]
+                                                        .targetStatus,
+                                                    snapshot.data![index]
+                                                        .targetDate,
+                                                    snapshot.data![index]
+                                                        .targetedAmount,
+                                                    snapshot.data![index]
+                                                        .amountSaved,
+                                                    canItBeAccomplished);
+                                              },
+                                              canItBeAccomplished:
+                                                  canItBeAccomplished)
+                                          : Center();
+                                    },
+                                  );
+                                }
+                              },
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(
+                      // height: 10.0,
+                      ),
+                  Padding(
+                    padding: const EdgeInsets.all(10.0),
+                    child: Container(
+                      width: double.infinity,
+                      height: 350,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: const BorderRadius.all(
+                          Radius.circular(12),
+                        ),
+                        border: Border.all(width: 1, color: Colors.black12),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            height: 95,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                                color: Colors.blue,
+                                border:
+                                    Border.all(width: 1, color: Colors.blue),
+                                borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(8))),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  height: 48,
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        "Savings",
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () {
+                                          addSavingsWindow();
+                                        },
+                                        child: const Icon(
+                                          Icons.add,
+                                          size: 30,
+                                          color: Colors.white,
                                         ),
                                       )
                                     ],
                                   ),
                                 ),
+                                Container(
+                                  width: double.infinity,
+                                  height: 43,
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(
+                                        width: 1, color: Colors.white),
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(8),
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: (_isLoading)
+                                        ? Text("....")
+                                        : Text(
+                                            "${_totalSavedAmount.toString()} Tsh",
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                  ),
+                                )
                               ],
-                            )
-                          ],
-                        ),
-                      );
+                            ),
+                          ),
+                          const SizedBox(
+                            height: 5,
+                          ),
+                          Column(
+                            children: [
+                              Container(
+                                width: double.infinity,
+                                height: 40,
+                                child: const Text(
+                                  "My Budgets",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              Container(
+                                width: double.infinity,
+                                height: 120,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: const BorderRadius.vertical(
+                                    bottom: Radius.circular(10),
+                                  ),
+                                  border: Border.all(
+                                      width: 1, color: Colors.black12),
+                                ),
+                                child: FutureBuilder<List<Budget>>(
+                                  future: futureBudgets,
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return const Center(
+                                          child: CircularProgressIndicator(
+                                        color: Colors.blue,
+                                      ));
+                                    } else if (snapshot.hasError) {
+                                      return Text('Error: ${snapshot.error}');
+                                    } else if (!snapshot.hasData ||
+                                        snapshot.data!.isEmpty) {
+                                      return Center(
+                                        child: const Text(
+                                            'No budgets available, start now.'),
+                                      );
+                                    } else {
+                                      List<Budget> budgets = snapshot.data!;
+                                      return ListView.builder(
+                                        scrollDirection: Axis.horizontal,
+                                        itemCount: budgets.length,
+                                        itemBuilder: (context, index) {
+                                          Budget budget = budgets[index];
+                                          String formatedAmount =
+                                              formatAmount(budget.amount);
+                                          String usedformatedAmount =
+                                              formatAmount(budget.amountUsed);
+                                          double percentage =
+                                              (budget.amountUsed /
+                                                      budget.amount) *
+                                                  100;
+                                          // DateTime currentTimestamp = DateTime
+                                          //     .now(); // Example timestamp 1
+                                          // DateTime targetDate =
+                                          //     budget.createdAt.add(
+                                          //   Duration(days: budget.duration),
+                                          // );
+
+                                          // // Calculate the difference between targetDate and current date
+                                          // DateTime currentDate = DateTime.now();
+                                          // Duration difference = targetDate
+                                          //     .difference(currentDate);
+
+                                          // // Format the difference as days
+                                          // int differenceInDays =
+                                          //     difference.inDays;
+
+                                          return BudgetCard(
+                                            category: budget.category,
+                                            days: budget.duration,
+                                            price: formatedAmount,
+                                            usedPrice: usedformatedAmount,
+                                            percentage: percentage,
+                                            ontap: () {
+                                              viewBudget(budget.category);
+                                            },
+                                          );
+                                        },
+                                      );
+                                    }
+                                  },
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  addBudget();
+                                },
+                                child: Container(
+                                  width: double.infinity,
+                                  height: 50.0,
+                                  margin:
+                                      const EdgeInsets.symmetric(vertical: 5.0),
+                                  decoration: BoxDecoration(
+                                    // color: Colors.blue,
+                                    border: Border.all(
+                                        width: 2, color: color.primaryColor),
+                                    borderRadius: const BorderRadius.all(
+                                      Radius.circular(8),
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: (!_isLoading)
+                                        ? Text(
+                                            "Add Budget",
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.w600),
+                                          )
+                                        : CircularProgressIndicator(
+                                            color: Colors.blue,
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    // height: 400,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                "My Loans",
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (context) =>
+                                              const LoansPage()));
+                                },
+                                child: const Row(
+                                  children: [
+                                    Text("View all"),
+                                    Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(horizontal: 5.0),
+                                      child: Icon(
+                                        Icons.arrow_forward_ios,
+                                        size: 15,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            ],
+                          ),
+                          const Divider(),
+                          Container(
+                            width: double.infinity,
+                            // height: 40,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Tabs(
+                                      title: "Credited",
+                                      selectedIndex: _selectedLoanType,
+                                      index: 0,
+                                      isPressed: () {
+                                        setState(
+                                          () {
+                                            changeLoanType(0);
+                                            _loanTypeController.animateToPage(0,
+                                                duration: const Duration(
+                                                    milliseconds: 500),
+                                                curve: Curves.ease);
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    Tabs(
+                                      title: "Debited",
+                                      selectedIndex: _selectedLoanType,
+                                      index: 1,
+                                      isPressed: () {
+                                        setState(
+                                          () {
+                                            changeLoanType(1);
+
+                                            _loanTypeController.animateToPage(
+                                              1,
+                                              duration: const Duration(
+                                                milliseconds: 500,
+                                              ),
+                                              curve: Curves.ease,
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const LoansPage(),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 6),
+                                    // width: 90,
+                                    // height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black12,
+                                      border: Border.all(
+                                          width: 1, color: Colors.black26),
+                                      borderRadius: const BorderRadius.all(
+                                        Radius.circular(5),
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.add),
+                                        Text(
+                                          "Add loan",
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              ],
+                            ),
+                          ),
+                          SizedBox(
+                            height: 400,
+                            child: FutureBuilder<List<Loan>>(
+                              future: fetchLoans,
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData) {
+                                  return PageView(
+                                    controller: _loanTypeController,
+                                    children: [
+                                      Container(
+                                        child: ListView.builder(
+                                          itemCount: snapshot.data!.length,
+                                          itemBuilder: (context, index) {
+                                            double? interestAmount = snapshot
+                                                    .data![index].interest! *
+                                                (snapshot.data![index].amount /
+                                                    100);
+
+                                            // Calculate the difference in days
+                                            int remainingDays = snapshot
+                                                .data![index].loanDueDate
+                                                .difference(DateTime.now())
+                                                .inDays;
+                                            if (snapshot
+                                                    .data![index].loanType ==
+                                                "own") {
+                                              if (index < 10) {
+                                                return LoanCard(
+                                                    loanType: snapshot
+                                                        .data![index].loanType,
+                                                    actorName: snapshot
+                                                        .data![index].actorName,
+                                                    amount: snapshot
+                                                        .data![index].amount,
+                                                    amountPayed: snapshot
+                                                        .data![index]
+                                                        .amountPayed,
+                                                    remainingDays:
+                                                        remainingDays,
+                                                    interestAmount:
+                                                        interestAmount);
+                                              } else {
+                                                return const Center();
+                                              }
+                                            }
+                                            return const Center();
+                                          },
+                                        ),
+                                      ),
+                                      Container(
+                                        child: ListView.builder(
+                                          itemCount: snapshot.data!.length,
+                                          itemBuilder: (context, index) {
+                                            double? interestAmount = (snapshot
+                                                        .data![index]
+                                                        .interest! /
+                                                    100) *
+                                                snapshot.data![index].amount;
+
+                                            // Calculate the difference in days
+                                            int remainingDays = snapshot
+                                                .data![index].loanDueDate
+                                                .difference(DateTime.now())
+                                                .inDays;
+                                            if (snapshot
+                                                    .data![index].loanType ==
+                                                "owned") {
+                                              if (index < 5) {
+                                                return LoanCard(
+                                                    loanType: snapshot
+                                                        .data![index].loanType,
+                                                    actorName: snapshot
+                                                        .data![index].actorName,
+                                                    amount: snapshot
+                                                        .data![index].amount,
+                                                    amountPayed: snapshot
+                                                        .data![index]
+                                                        .amountPayed,
+                                                    remainingDays:
+                                                        remainingDays,
+                                                    interestAmount:
+                                                        interestAmount);
+                                              } else {
+                                                return const Center();
+                                              }
+                                            }
+                                            return const Center();
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                } else if (snapshot.hasError) {
+                                  return Text("${snapshot.error}");
+                                } else if (!snapshot.hasData) {
+                                  return const Center(
+                                    child: Text(
+                                        "you have no loan added, you can add your loans any time ):"),
+                                  );
+                                }
+                                return const Center(
+                                    child: CircularProgressIndicator());
+                              },
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                  bottom: 80,
+                  right: 10,
+                  child: FloatingActionButton(
+                    onPressed: () {
+                      toggleTransactionCard();
                     },
-                  )
-                : Container(),
-          ],
+                    child: Icon((addTransaction) ? Icons.close : Icons.add),
+                  )),
+              (addTransaction == true)
+                  ? DraggableScrollableSheet(
+                      initialChildSize:
+                          0.7, // Initial size of the sheet (30% of the screen)
+                      minChildSize:
+                          0.1, // Minimum size of the sheet (10% of the screen)
+                      maxChildSize:
+                          0.8, // Maximum size of the sheet (80% of the screen)
+                      builder: (BuildContext context,
+                          ScrollController scrollController) {
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(15),
+                            ),
+                          ),
+                          child: ListView(
+                            controller: scrollController,
+                            children: [
+                              Align(
+                                child: Container(
+                                  width: 100,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black12,
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(
+                                height: 10,
+                              ),
+                              Column(
+                                children: [
+                                  Container(
+                                    width: double.infinity,
+                                    height: 50,
+                                    // color: Colors.red,
+                                    child: const TabBar(
+                                      padding: EdgeInsets.all(0),
+                                      labelColor: Colors.black,
+                                      indicatorColor: Colors.black,
+                                      labelPadding: EdgeInsets.all(0),
+                                      unselectedLabelStyle: TextStyle(
+                                        fontSize: 14,
+                                        // fontWeight: FontWeight.w400,
+                                        color: Colors.black54,
+                                      ),
+                                      labelStyle: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700),
+                                      tabs: [
+                                        Tab(
+                                          text: "New Transaction",
+                                        ),
+                                        Tab(text: "History"),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    width: double.infinity,
+                                    height: MediaQuery.of(context).size.height /
+                                        2.2,
+                                    // color: Colors.red,
+                                    child: TabBarView(
+                                      children: [
+                                        Container(
+                                          child: ListView(
+                                            children: [
+                                              Container(
+                                                width: double.infinity,
+                                                height: 50,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 7),
+                                                margin:
+                                                    const EdgeInsets.symmetric(
+                                                        vertical: 5),
+                                                decoration: BoxDecoration(
+                                                  border: Border.all(
+                                                      width: 1,
+                                                      color: Colors.black26),
+                                                  borderRadius:
+                                                      const BorderRadius.all(
+                                                    Radius.circular(10),
+                                                  ),
+                                                ),
+                                                child: DropdownButton(
+                                                  isExpanded: true,
+                                                  elevation: 0,
+                                                  // Initial Value
+                                                  value: transactionTypevalue,
+                                                  // Down Arrow Icon
+                                                  icon: const Icon(Icons
+                                                      .keyboard_arrow_down),
+
+                                                  // Array list of items
+                                                  items: transactionType
+                                                      .map((String items) {
+                                                    return DropdownMenuItem(
+                                                      value: items,
+                                                      child: Text(items),
+                                                    );
+                                                  }).toList(),
+                                                  // After selecting the desired option,it will
+                                                  // change button value to selected value
+                                                  onChanged:
+                                                      (String? newValue) {
+                                                    setState(() {
+                                                      transactionTypevalue =
+                                                          newValue!;
+                                                    });
+                                                  },
+                                                ),
+                                              ),
+                                              (transactionTypevalue ==
+                                                      "expense")
+                                                  ? Container(
+                                                      width: double.infinity,
+                                                      height: 50,
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 7),
+                                                      margin: const EdgeInsets
+                                                          .symmetric(
+                                                          vertical: 5),
+                                                      decoration: BoxDecoration(
+                                                        border: Border.all(
+                                                            width: 1,
+                                                            color:
+                                                                Colors.black26),
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .all(
+                                                          Radius.circular(10),
+                                                        ),
+                                                      ),
+                                                      child: DropdownButton(
+                                                        isExpanded: true,
+                                                        elevation: 0,
+                                                        // Initial Value
+                                                        value:
+                                                            purposedropdownvalue,
+                                                        // Down Arrow Icon
+                                                        icon: const Icon(Icons
+                                                            .keyboard_arrow_down),
+
+                                                        // Array list of items
+                                                        items: purposeItems.map(
+                                                            (String items) {
+                                                          return DropdownMenuItem(
+                                                            value: items,
+                                                            child: Text(items),
+                                                          );
+                                                        }).toList(),
+                                                        // After selecting the desired option,it will
+                                                        // change button value to selected value
+                                                        onChanged:
+                                                            (String? newValue) {
+                                                          setState(() {
+                                                            purposedropdownvalue =
+                                                                newValue!;
+                                                          });
+                                                        },
+                                                      ),
+                                                    )
+                                                  : Container(),
+                                              (transactionTypevalue == "income")
+                                                  ? SingleChildScrollView(
+                                                      scrollDirection:
+                                                          Axis.horizontal,
+                                                      child: Row(
+                                                        children: [
+                                                          Row(
+                                                            children: [
+                                                              Radio<String>(
+                                                                value: 'salary',
+                                                                groupValue:
+                                                                    _selectedOption,
+                                                                onChanged:
+                                                                    (String?
+                                                                        value) {
+                                                                  setState(() {
+                                                                    _selectedOption =
+                                                                        value;
+                                                                  });
+                                                                },
+                                                              ),
+                                                              const Text(
+                                                                "salary",
+                                                                style: TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          Row(
+                                                            children: [
+                                                              Radio<String>(
+                                                                value: 'other',
+                                                                groupValue:
+                                                                    _selectedOption,
+                                                                onChanged:
+                                                                    (String?
+                                                                        value) {
+                                                                  setState(() {
+                                                                    _selectedOption =
+                                                                        value;
+                                                                  });
+                                                                },
+                                                              ),
+                                                              const Text(
+                                                                "other sources",
+                                                                style: TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          Row(
+                                                            children: [
+                                                              Radio<String>(
+                                                                value:
+                                                                    'loan owned',
+                                                                groupValue:
+                                                                    _selectedOption,
+                                                                onChanged:
+                                                                    (String?
+                                                                        value) {
+                                                                  setState(() {
+                                                                    _selectedOption =
+                                                                        value;
+                                                                  });
+                                                                },
+                                                              ),
+                                                              const Text(
+                                                                "loan owned",
+                                                                style: TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    )
+                                                  : Container(),
+                                              (purposedropdownvalue ==
+                                                          "target" &&
+                                                      transactionTypevalue ==
+                                                          "expense")
+                                                  ? Container(
+                                                      width: double.infinity,
+                                                      height: 50,
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 7),
+                                                      margin: const EdgeInsets
+                                                          .symmetric(
+                                                          vertical: 5),
+                                                      decoration: BoxDecoration(
+                                                        border: Border.all(
+                                                            width: 1,
+                                                            color:
+                                                                Colors.black26),
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .all(
+                                                          Radius.circular(10),
+                                                        ),
+                                                      ),
+                                                      child: targetList.isEmpty
+                                                          ? const Center(
+                                                              child:
+                                                                  CircularProgressIndicator(),
+                                                            )
+                                                          : DropdownButton<
+                                                              Target>(
+                                                              value:
+                                                                  selectedTarget,
+                                                              hint: const Text(
+                                                                  'Select a Target'),
+                                                              onChanged: (Target?
+                                                                  newValue) {
+                                                                setState(() {
+                                                                  selectedTarget =
+                                                                      newValue!;
+                                                                });
+                                                              },
+                                                              items: targetList
+                                                                  .map((Target
+                                                                      target) {
+                                                                return DropdownMenuItem<
+                                                                    Target>(
+                                                                  value: target,
+                                                                  child: Text(target
+                                                                      .targetName),
+                                                                );
+                                                              }).toList(),
+                                                            ),
+                                                    )
+                                                  : Container(),
+                                              (purposedropdownvalue == "loan" &&
+                                                      transactionTypevalue ==
+                                                          "expense")
+                                                  ? Container(
+                                                      width: double.infinity,
+                                                      height: 50,
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 7),
+                                                      margin: const EdgeInsets
+                                                          .symmetric(
+                                                          vertical: 5),
+                                                      decoration: BoxDecoration(
+                                                        border: Border.all(
+                                                            width: 1,
+                                                            color:
+                                                                Colors.black26),
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .all(
+                                                          Radius.circular(10),
+                                                        ),
+                                                      ),
+                                                      child: loanList.isEmpty
+                                                          ? const Center(
+                                                              child:
+                                                                  CircularProgressIndicator(),
+                                                            )
+                                                          : DropdownButton<
+                                                              Loan>(
+                                                              value:
+                                                                  selectedLoan,
+                                                              hint: const Text(
+                                                                  'Select Loan'),
+                                                              onChanged: (Loan?
+                                                                  newValue) {
+                                                                setState(() {
+                                                                  selectedLoan =
+                                                                      newValue!;
+                                                                });
+                                                              },
+                                                              items: loanList
+                                                                  .map((Loan
+                                                                      loan) {
+                                                                return DropdownMenuItem<
+                                                                    Loan>(
+                                                                  value: loan,
+                                                                  child: Text(loan
+                                                                      .actorName),
+                                                                );
+                                                              }).toList(),
+                                                            ),
+                                                    )
+                                                  : Container(),
+                                              InputBox(
+                                                isText: false,
+                                                title: "Amount",
+                                                controller: _amountController,
+                                              ),
+                                              Container(
+                                                width: double.infinity,
+                                                height: 50,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 7),
+                                                margin:
+                                                    const EdgeInsets.symmetric(
+                                                        vertical: 5),
+                                                decoration: BoxDecoration(
+                                                  border: Border.all(
+                                                      width: 1,
+                                                      color: Colors.black26),
+                                                  borderRadius:
+                                                      const BorderRadius.all(
+                                                    Radius.circular(10),
+                                                  ),
+                                                ),
+                                                child: DropdownButton(
+                                                  isExpanded: true,
+                                                  elevation: 0,
+                                                  // Initial Value
+                                                  value: dropdownvalue,
+                                                  // Down Arrow Icon
+                                                  icon: const Icon(
+                                                    Icons.keyboard_arrow_down,
+                                                  ),
+
+                                                  // Array list of items
+                                                  items:
+                                                      items.map((String items) {
+                                                    return DropdownMenuItem(
+                                                      value: items,
+                                                      child: Text(items),
+                                                    );
+                                                  }).toList(),
+                                                  // After selecting the desired option,it will
+                                                  // change button value to selected value
+                                                  onChanged:
+                                                      (String? newValue) {
+                                                    setState(() {
+                                                      dropdownvalue = newValue!;
+                                                    });
+                                                  },
+                                                ),
+                                              ),
+                                              InputBox(
+                                                isText: true,
+                                                title: "Description",
+                                                controller:
+                                                    _descriptionController,
+                                              ),
+                                              const SizedBox(
+                                                height: 12,
+                                              ),
+                                              MaterialButton(
+                                                minWidth: double.infinity,
+                                                height: 50,
+                                                color: color.buttonColor,
+                                                onPressed: () {
+                                                  addTransactionFn();
+                                                },
+                                                child: (!isTransLoading)
+                                                    ? const Text(
+                                                        "Add Transaction",
+                                                        style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .w600),
+                                                      )
+                                                    : const CircularProgressIndicator(
+                                                        color: Colors.white),
+                                              )
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          child: Column(
+                                            children: [
+                                              const SizedBox(
+                                                height: 10,
+                                              ),
+                                              Container(
+                                                width: double.infinity,
+                                                height: 60,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        vertical: 3.0),
+                                                child: ListView.builder(
+                                                  itemCount: tabsLength.length,
+                                                  scrollDirection:
+                                                      Axis.horizontal,
+                                                  itemBuilder:
+                                                      (context, index) {
+                                                    return Tabs(
+                                                      title: tabsLength[index],
+                                                      index: index,
+                                                      selectedIndex:
+                                                          _selectedIndex,
+                                                      isPressed: () {
+                                                        changeTabs(index);
+                                                        _pageController.animateToPage(
+                                                            index,
+                                                            duration:
+                                                                const Duration(
+                                                                    milliseconds:
+                                                                        500),
+                                                            curve: Curves.ease);
+                                                      },
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: PageView(
+                                                  controller: _pageController,
+                                                  onPageChanged: (int page) {
+                                                    setState(() {
+                                                      _selectedIndex = page;
+                                                      print(_selectedIndex);
+                                                    });
+                                                  },
+                                                  children: <Widget>[
+                                                    CustomPage(
+                                                      content: FutureBuilder<
+                                                          List<Transaction>>(
+                                                        future:
+                                                            fetchTransactions,
+                                                        builder: (context,
+                                                            snapshot) {
+                                                          if (snapshot
+                                                              .hasData) {
+                                                            // print(snapshot.data!.length);
+                                                            return ListView
+                                                                .builder(
+                                                              itemCount:
+                                                                  snapshot.data!
+                                                                      .length,
+                                                              itemBuilder:
+                                                                  (contaxt,
+                                                                      index) {
+                                                                String
+                                                                    formattedDate =
+                                                                    formatDateTime(snapshot
+                                                                        .data![
+                                                                            index]
+                                                                        .date);
+                                                                return HistoryCard(
+                                                                  isPressed:
+                                                                      () {},
+                                                                  category: snapshot
+                                                                      .data![
+                                                                          index]
+                                                                      .category,
+                                                                  type: snapshot
+                                                                      .data![
+                                                                          index]
+                                                                      .transactionType,
+                                                                  description: snapshot
+                                                                      .data![
+                                                                          index]
+                                                                      .description,
+                                                                  price: snapshot
+                                                                      .data![
+                                                                          index]
+                                                                      .amount,
+                                                                  createdAt:
+                                                                      formattedDate,
+                                                                );
+                                                              },
+                                                            );
+                                                          } else if (snapshot
+                                                              .hasError) {
+                                                            return Text(
+                                                                "${snapshot.error}");
+                                                          }
+                                                          return const Center(
+                                                            child:
+                                                                CircularProgressIndicator(),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
+                                                    CustomPage(
+                                                      content: FutureBuilder<
+                                                          List<Transaction>>(
+                                                        future:
+                                                            fetchTransactions,
+                                                        builder: (context,
+                                                            snapshot) {
+                                                          if (snapshot
+                                                              .hasData) {
+                                                            // print(snapshot.data!.length);
+                                                            return ListView
+                                                                .builder(
+                                                                    itemCount:
+                                                                        snapshot
+                                                                            .data!
+                                                                            .length,
+                                                                    itemBuilder:
+                                                                        (contaxt,
+                                                                            index) {
+                                                                      if (snapshot
+                                                                              .data![index]
+                                                                              .transactionType ==
+                                                                          "income") {
+                                                                        String
+                                                                            formattedDate =
+                                                                            formatDateTime(snapshot.data![index].date);
+                                                                        return HistoryCard(
+                                                                          isPressed:
+                                                                              () {},
+                                                                          category: snapshot
+                                                                              .data![index]
+                                                                              .category,
+                                                                          type: snapshot
+                                                                              .data![index]
+                                                                              .transactionType,
+                                                                          description: snapshot
+                                                                              .data![index]
+                                                                              .description,
+                                                                          price: snapshot
+                                                                              .data![index]
+                                                                              .amount,
+                                                                          createdAt:
+                                                                              formattedDate,
+                                                                        );
+                                                                      } else {
+                                                                        return Container();
+                                                                      }
+                                                                    });
+                                                          } else if (snapshot
+                                                              .hasError) {
+                                                            return Text(
+                                                                "${snapshot.error}");
+                                                          }
+                                                          return const Center(
+                                                            child:
+                                                                CircularProgressIndicator(),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
+                                                    CustomPage(
+                                                      content: FutureBuilder<
+                                                          List<Transaction>>(
+                                                        future:
+                                                            fetchTransactions,
+                                                        builder: (context,
+                                                            snapshot) {
+                                                          if (snapshot
+                                                              .hasData) {
+                                                            // print(snapshot.data!.length);
+                                                            return ListView
+                                                                .builder(
+                                                                    itemCount:
+                                                                        snapshot
+                                                                            .data!
+                                                                            .length,
+                                                                    itemBuilder:
+                                                                        (contaxt,
+                                                                            index) {
+                                                                      if (snapshot
+                                                                              .data![index]
+                                                                              .transactionType ==
+                                                                          "expense") {
+                                                                        String
+                                                                            formattedDate =
+                                                                            formatDateTime(snapshot.data![index].date);
+                                                                        return HistoryCard(
+                                                                          isPressed:
+                                                                              () {},
+                                                                          category: snapshot
+                                                                              .data![index]
+                                                                              .category,
+                                                                          type: snapshot
+                                                                              .data![index]
+                                                                              .transactionType,
+                                                                          description: snapshot
+                                                                              .data![index]
+                                                                              .description,
+                                                                          price: snapshot
+                                                                              .data![index]
+                                                                              .amount,
+                                                                          createdAt:
+                                                                              formattedDate,
+                                                                        );
+                                                                      } else {
+                                                                        return Container();
+                                                                      }
+                                                                    });
+                                                          } else if (snapshot
+                                                              .hasError) {
+                                                            return Text(
+                                                                "${snapshot.error}");
+                                                          }
+                                                          return const Center(
+                                                            child:
+                                                                CircularProgressIndicator(),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              )
+                            ],
+                          ),
+                        );
+                      },
+                    )
+                  : Container(),
+            ],
+          ),
         ),
       ),
     );
@@ -1829,7 +2312,7 @@ class _HomePageState extends State<HomePage> {
           ),
           actions: <Widget>[
             TextButton(
-              child: Text('OK'),
+              child: const Text('OK'),
               onPressed: () {
                 Navigator.pop(context);
               },
@@ -1860,9 +2343,10 @@ class LoanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    double remainingAmount = (amount + interestAmount) - amountPayed;
     return Container(
       width: double.infinity,
-      height: 97,
+      height: 110,
       margin: const EdgeInsets.symmetric(vertical: 4.0),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -1902,20 +2386,24 @@ class LoanCard extends StatelessWidget {
                   Text(
                     actorName,
                     style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Colors.black54),
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
                   ),
                 ],
               ),
               Row(
                 children: [
                   const Text(
-                    "Amount-",
+                    "Remaining: ",
                     style: TextStyle(fontSize: 13),
                   ),
                   Text(
-                    amount.toString(),
+                    "${remainingAmount.toString()} Tsh",
                     style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Colors.black54),
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
                   ),
                 ],
               ),
@@ -1927,30 +2415,45 @@ class LoanCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Text(
-                    "Interest-",
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  Text(
-                    interestAmount.toString(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black54,
-                    ),
-                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Interest",
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        "${interestAmount.toString()} Tsh",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  )
                 ],
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    "Payed-",
-                    style: TextStyle(fontSize: 13),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Payed",
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        "${amountPayed.toString()} Tsh",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    amountPayed.toString(),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Colors.black54),
+                  SizedBox(
+                    width: 30,
                   ),
                   Container(
                     width: 70,
@@ -1967,7 +2470,9 @@ class LoanCard extends StatelessWidget {
                         const Text(
                           "remaining",
                           style: TextStyle(
-                              fontSize: 9, color: CupertinoColors.white),
+                            fontSize: 9,
+                            color: CupertinoColors.white,
+                          ),
                         ),
                         Text(
                           "${remainingDays.toString()} days",
@@ -2014,6 +2519,7 @@ class BudgetCard extends StatelessWidget {
   final String category;
   final int days;
   final String price;
+  final String usedPrice;
   final double percentage;
   final Function()? ontap;
 
@@ -2022,13 +2528,21 @@ class BudgetCard extends StatelessWidget {
     required this.category,
     required this.days,
     required this.price,
+    required this.usedPrice,
     required this.percentage,
     required this.ontap,
   });
 
   @override
   Widget build(BuildContext context) {
-    double newPercent = percentage / 100;
+    double newPercent = percentage * 0.01;
+    double checkedPercentage = percentage;
+    if (newPercent > 1.0) {
+      newPercent = 1;
+      checkedPercentage = 100;
+    } else {
+      newPercent = newPercent;
+    }
     return GestureDetector(
       onTap: ontap,
       child: Container(
@@ -2056,10 +2570,10 @@ class BudgetCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(3.0),
               child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 3),
                 width: 110,
                 height: 33,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Color.fromARGB(255, 230, 230, 230),
                   borderRadius: BorderRadius.all(
                     Radius.circular(5),
@@ -2068,7 +2582,8 @@ class BudgetCard extends StatelessWidget {
                 child: Center(
                   child: Text(
                     category,
-                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontSize: 9, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -2081,23 +2596,30 @@ class BudgetCard extends StatelessWidget {
                   lineWidth: 3.0,
                   percent: newPercent,
                   animation: true,
-                  progressColor: Color.fromARGB(255, 255, 135, 23),
+                  progressColor: (newPercent < 0.8) ? Colors.green : Colors.red,
                   center: new Text(
-                    "${double.parse(percentage.toStringAsFixed(1))}%",
+                    "${double.parse(checkedPercentage.toStringAsFixed(1))}%",
                     style: const TextStyle(
-                        fontSize: 8, fontWeight: FontWeight.bold),
+                        fontSize: 7, fontWeight: FontWeight.bold),
                   ),
                 ),
                 Column(
                   children: [
                     Text(
                       "$price",
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      "-$usedPrice",
+                      style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange),
                     ),
                     Text(
                       "$days days",
-                      style: TextStyle(
+                      style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                           color: Colors.blue),
@@ -2106,7 +2628,7 @@ class BudgetCard extends StatelessWidget {
                 )
               ],
             ),
-            SizedBox(),
+            const SizedBox(),
           ],
         ),
       ),
@@ -2120,6 +2642,7 @@ class TargetCard extends StatelessWidget {
   final double percent;
   final String timeRemained;
   final Function() ontap;
+  final bool canItBeAccomplished;
   const TargetCard({
     super.key,
     required this.targetName,
@@ -2127,6 +2650,7 @@ class TargetCard extends StatelessWidget {
     required this.percent,
     required this.timeRemained,
     required this.ontap,
+    required this.canItBeAccomplished,
   });
 
   @override
@@ -2137,7 +2661,7 @@ class TargetCard extends StatelessWidget {
         width: 190,
         height: 180.0,
         margin: const EdgeInsets.all(8),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2.0),
         decoration: BoxDecoration(
           // color: Colors.yellow[50],
           borderRadius: const BorderRadius.all(
@@ -2152,7 +2676,7 @@ class TargetCard extends StatelessWidget {
               children: [
                 Container(
                   // width: 40,
-                  height: 35,
+                  height: 30,
                   child: new LinearPercentIndicator(
                     width: 100.0,
                     lineHeight: 8.0,
@@ -2164,6 +2688,27 @@ class TargetCard extends StatelessWidget {
                   "${timeRemained} days",
                   style: const TextStyle(
                       fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: Color.fromARGB(255, 226, 226, 226),
+                    borderRadius: BorderRadius.all(
+                      Radius.circular(10),
+                    ),
+                  ),
+                  child: (canItBeAccomplished)
+                      ? Icon(
+                          Icons.lock_open,
+                          size: 12,
+                          color: Colors.green,
+                        )
+                      : Icon(
+                          Icons.lock,
+                          size: 12,
+                          color: Colors.red,
+                        ),
                 )
               ],
             ),
@@ -2175,14 +2720,14 @@ class TargetCard extends StatelessWidget {
                     Center(
                       child: Text(targetName),
                     ),
-                    Center(
-                      child: Text(
-                        targetAmount.toString(),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
                   ],
                 ),
+              ),
+            ),
+            Center(
+              child: Text(
+                "${targetAmount.toString()} Tsh",
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             )
           ],
@@ -2301,17 +2846,17 @@ class HistoryCard extends StatelessWidget {
                     color: Colors.black54,
                   )),
               Padding(
-                padding: EdgeInsets.all(8.0),
+                padding: const EdgeInsets.all(8.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       category!,
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 12),
                     ),
-                    Text(description!, style: TextStyle(fontSize: 12)),
+                    Text(description!, style: const TextStyle(fontSize: 12)),
                   ],
                 ),
               ),
@@ -2324,21 +2869,21 @@ class HistoryCard extends StatelessWidget {
               (type == "expense")
                   ? Text(
                       "-${price.toString()}",
-                      style: TextStyle(
+                      style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
                           color: Colors.orange),
                     )
                   : Text(
                       "+${price.toString()}",
-                      style: TextStyle(
+                      style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
-                          color: const Color.fromARGB(255, 63, 199, 68)),
+                          color: Color.fromARGB(255, 63, 199, 68)),
                     ),
               Text(
                 createdAt,
-                style: TextStyle(fontSize: 10),
+                style: const TextStyle(fontSize: 10),
               ),
             ],
           ),

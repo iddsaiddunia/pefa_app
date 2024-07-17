@@ -61,9 +61,10 @@ class LoanService {
     }
   }
 
-  Future<void> deleteLoan(String token, int loanId) async {
+  Future<void> deleteLoan(int loanId) async {
+    String? token = await _authService.getToken();
     final response = await http.delete(
-      Uri.parse('$baseUrl/$loanId/'),
+      Uri.parse('$baseUrl/loans/$loanId/'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
